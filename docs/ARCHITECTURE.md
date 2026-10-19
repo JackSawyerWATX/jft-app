@@ -1,75 +1,88 @@
 # Architecture
 
-Doorknob groups code by responsibility, with the share feature kept together. Next.js route files are entry points; browser state, presentation, and persistence have separate owners. There is no global state library, service framework, or external integration.
+Doorknob v0.2 keeps the React frontend and Next.js Backend for Frontend (BFF) in `jft-app`. App Router Route Handlers run in Node.js. There is no separately deployed backend, database, ORM, login/authentication framework, or external persistence. `@hono/zod-openapi` implements the small HTTP layer within the existing Next.js server; it does not add a separately hosted backend.
 
 ## Responsibilities
 
-- **`src/app/page.tsx`** is the server-rendered route entry. It renders the interactive share experience without a content-injection prop.
-- **`src/app/layout.tsx`** supplies page metadata and the shared stylesheet.
-- **`public/doorknob-logo.svg`** owns the brand artwork. Screens reference the asset through Next.js Image; the small decorative lock stays behind a named `LockIcon` component. Drawing coordinates stay outside screen and form markup.
-- **`src/app/globals.css`** supplies the ivory and navy palette, serif typography, responsive spacing, and focus styles alongside Tailwind utilities.
-- **`src/shares/share-app.tsx`** is the client boundary. It owns the current screen, draft, history, loading/error feedback, and heading focus. History is explicitly loading, loaded, or failed; an unreadable history is never presented as an empty one. The screen state carries a share only for saved/detail views, so those views cannot exist without the record they display.
-- **`src/components/`** owns the app-wide header and footer.
-- **`src/shares/components/`** contains the reading, form, history, and detail presentation components. Props express their inputs and callbacks; they do not access storage. Each history item owns its preview and date formatting. The form owns its save-error markup and generated accessibility IDs; history-loading errors remain at the application level. The share controller composes the reading directly. Components imported by the client boundary run as part of its client tree without redundant `use client` directives.
-- **`src/shares/model.ts`** owns the fixed reading, versioned storage key, creation, and Zod schemas. Share and reflection types are inferred from those schemas, keeping the TypeScript and runtime contracts together. Unknown fields are preserved for forward compatibility; invalid records still fail without overwriting history. It has no dependency on React or browser storage.
-- **`src/shares/storage.ts`** reads and writes validated history. It accepts the small storage API it needs, so error behavior can be tested without a browser. Browser storage is accessed only after mounting or in event handlers.
-- **`src/shares/dates.ts`** formats saved timestamps in the reader's local time zone and reading calendar dates in UTC, preventing calendar dates from moving to the previous day.
-- **`tests/shares/`** verifies data and persistence contracts. **`tests/e2e/`** checks real user flows in mobile and desktop Chromium.
+- `src/app/page.tsx` and `layout.tsx` supply the route entry, metadata, and shared styling. Existing mobile-first components, logo, ivory/navy palette, focus styles, and typography remain in place.
+- `src/shares/share-app.tsx` owns screens, the React draft, save/detail requests, and heading focus. A ref prevents duplicate submits synchronously. `use-share-history.ts` owns the history state type, loading, stale-response protection, and initial session bootstrap. Presentation consumes that state type; the hook does not depend on a component. Detail loading uses a discriminated union so failure always includes a message. Saving stays blocked until bootstrap succeeds; failure preserves the draft and provides retry on the writing screen. Bootstrap retries share one in-flight request, and the submit handler enforces readiness as well as the button. After readiness, history refreshes are independent of saving. It reuses the bootstrap promise across Strict Mode effects, while entering Past shares after initialization always fetches fresh history. Confirmed saves clear the draft without maintaining a second history cache.
+- `src/shares/components/` presents the reading, form, history, and detail. `src/components/` owns the header/footer. Presentation components do not access persistence.
+- `src/shares/api.ts` uses browser `fetch` with same-origin credentials and no caching. It validates responses with shared Zod schemas and preserves HTTP status even when an error response is not JSON. It sends only text on creation and fetches details by ID instead of opening a cached history record.
+- `src/shares/model.ts` owns shared input/response schemas and their inferred types. `reflection-fixture.ts` supplies the fictional reading to both the UI and server-side share construction. Types are inferred from Zod. The strict creation schema rejects client metadata and ownership fields. Response parsing omits server ownership.
+- `src/app/api/shares/route.ts` and `[id]/route.ts` are thin dynamic Node dispatch exports for Next.js. `src/app/api/openapi.json/route.ts` exposes the generated specification. Explicit exports let the library handle HEAD, OPTIONS, and rejected App Router methods consistently.
+- `src/shares/server/operations/create-share.ts`, `list-shares.ts`, and `read-share.ts` each encapsulate one operation’s OpenAPI contract and typed handler. Contracts select shared middleware, and handlers call the owner-scoped repository. `resource-methods.ts` owns resource-level HEAD documentation, OPTIONS, and 405 responses. Stateless operations use modules and exported functions rather than controller classes.
+- `src/shares/server/openapi.ts` supplies shared contract schemas, headers, HEAD/OPTIONS helpers, and document metadata. `app.ts` directly registers operation contracts/handlers, installs shared validation/error handling and cache policy, and serves the specification. Next.js entry files remain adapters with pointers to their operation modules; neither operation modules nor specification generation import Next entry files. `scripts/generate-openapi.ts` serializes the same document to ignored `.tmp/openapi.yaml` for Spectral and CI artifact upload; TypeScript remains authoritative.
+- `src/shares/errors.ts` owns stable failure codes/the runtime error envelope. The fetch client preserves codes and status in `ShareApiError`; messages remain display text.
+- `src/shares/server/repository.ts` defines the asynchronous, owner-scoped `ShareRepository` interface and `InMemoryShareRepository` class. Each instance encapsulates a private Map; tests can instantiate independent stores. `create-stored-share.ts` owns stored-record validation and construction: trimming text, generating metadata, and capturing the reading before storage. Every retrieval takes an owner ID, so there is no unscoped private lookup. Returned records are cloned to prevent callers mutating stored snapshots.
+- `src/shares/server/session.ts` handles anonymous signed cookies. `http.ts` owns the status/message mapping and protocol/size constants. `middleware.ts` enforces sessions and POST origin/media-type/body limits. `http.ts` owns the typed error-body builder and translates explicit session failures; JSON syntax errors are classified at the body-parsing boundary, while unexpected errors (including arbitrary HTTP exceptions) become generic 500 responses; `app.ts` installs that handler and applies cache policy once at dispatch. The custom DoorknobSession challenge describes cookie credentials, not OAuth or public share tokens. These modules import `server-only` to prevent client bundling.
+- `src/shares/dates.ts` preserves saved timestamp/local timezone and reading calendar date/UTC behavior.
+
+## HTTP contract
+
+[The private API reference](API.md) owns request/response examples, validation rules, status codes, cookie-client usage, and retry semantics. The handlers support POST/list at `/api/shares` and owner-checked detail at `/api/shares/:id`. They project stored records through `shareSchema` before returning JSON, removing `ownerId` after authorization. Rejected App Router methods use the coded 405 envelope and Allow. Responses rejected before library dispatch remain framework-owned.
+
+## Request and schema flow
+
+```mermaid
+flowchart TD
+  Browser[Browser fetch] --> Next[Next.js Route Handler]
+  Next --> App[OpenAPIHono dispatcher]
+  App --> Origin[POST same-origin check]
+  Origin --> Session[Validate or issue anonymous session]
+  Session --> Input[POST media type, byte limit, JSON syntax, Zod validation]
+  Input --> Repository[Owner-scoped Map repository]
+  Repository --> Output[Project saved records through Share schema]
+  Output --> Browser
+  Contract[Route definitions and shared Zod schemas] --> Input
+  Contract --> Document[GET /api/openapi.json]
+```
+
+GET/HEAD skip POST input validation. OPTIONS and rejected methods skip session creation. POST origin checks precede sessions, so a rejected cross-site form cannot replace an owner cookie. For accepted origins, invalid credentials win over body validation failures. The cookie is attached to successful/non-500 action responses for newly issued sessions; foreign-origin rejections, 401, and internal failures do not issue replacements.
+
+Media types use `content-type` parsing rather than handwritten regular expressions. The app normalizes valid application/json before the library validator. It strips the incoming Content-Length from the internal Request so Hono's body-limit middleware counts actual bytes, including streams; it buffers at most 64 KiB. Shared input validation limits raw text to 10,000 Unicode code points before trimming, matching the generated maxLength constraint. Whitespace-only rejection remains a Zod semantic rule described in the contract.
+
+## Anonymous session boundary
+
+Hono's signed-cookie utilities sign and verify a JSON payload containing a random UUID `ownerId` and numeric `expiresAt`. After signature verification, Zod validates the payload and the server enforces absolute expiry. `getSession` returns a typed `newSession` payload only for new owners; `setSessionCookie` validates and serializes that server-created payload internally before signing. Payload types alone do not establish authenticity. Missing cookies bootstrap a new owner; supplied malformed, forged, or expired credentials are rejected. Cookie parsing/signature encoding and cryptographic verification belong to the library, rather than an application-specific credential format. Transport policy and client recovery behavior are documented in [the API reference](API.md#session-and-response-conventions).
+
+This prototype replaces the earlier development cookie format without migration. Clear the old site cookie once if it receives 401; existing test shares are disposable.
+
+Production requires a `SESSION_SECRET` of at least 32 bytes (generate it randomly). Development uses a process-global random secret unless one is configured. Signing configuration is checked when an API request needs the key, not at server startup. Missing production configuration or a nonempty configured value shorter than 32 bytes fails closed with a generic 500. An unset/empty development value selects the random fallback. No fallback production secret is used. POST requires JSON and rejects a supplied foreign Origin; SameSite cookies provide an additional browser boundary. Deploy behind HTTPS, preserving the request origin.
+
+This mechanism provides browser-session isolation without login, recovery, revocation, or public sharing tokens. [The API reference](API.md#session-and-response-conventions) owns the cookie/client contract; [the data glossary](DATA_GLOSSARY.md#app-data-lifecycle) owns access loss and retention.
 
 ## Save and read flow
 
-1. The client reads `doorknob.shares.v1` after mounting. Parsing validates every record and orders history by creation timestamp, newest first.
-2. Saving trims the draft and rejects empty text. The new record receives a UUID, ISO timestamp, and a copy of the reading.
-3. Persistence reads history again immediately before writing to retain recent saves from other tabs when possible. localStorage does not provide transactional writes, so simultaneous saves across tabs can still race.
-4. Only a successful storage write updates the in-memory history, clears the draft, and opens the confirmation view.
-5. Selecting a history entry opens its full text and original reading snapshot. View changes focus the heading; the form references its help and error messages for assistive technology. Muted text and placeholders use a color with at least 4.5:1 contrast on the ivory background, and the header navigation has a 44px minimum height.
+1. Load history and establish a session. Drafts remain in React state.
+2. POST only the text. Zod rejects empty/whitespace input and client-supplied metadata. The server associates the validated owner, captures the current placeholder reading, generates UUID/time, and stores a record.
+3. Only a confirmed successful response clears the draft and displays the saved share. Failures retain the draft. Pending saves prevent duplicate submissions within the UI.
+4. Past shares fetches fresh, newest-first history. Loading, empty, and failed results are distinct; errors offer retry.
+5. Opening an entry fetches its current owner-checked detail. Missing and unauthorized IDs both return 404. Detail request failures keep history available.
 
-Storage access, parsing, quota, or serialization failures show an error. Failed saves retain the draft. Invalid history is not replaced by an empty array, preventing a subsequent save from silently destroying unreadable records. There is no automatic repair or migration in this milestone.
+A network failure after the server commits can leave the client uncertain whether a write succeeded. This milestone has no idempotency key; UI duplicate prevention applies while a request is pending. Refresh history before retrying an ambiguous failed write if avoiding duplicate text matters.
 
-## Data contract
+## Persistence boundary and limitations
 
-A share contains `id`, `createdAt`, `kind`, `reflection`, and `text`. The reflection snapshot contains its own ID, date, title, and body, so changing the daily reading does not alter past shares. `kind: 'text'` makes the current record type explicit without unused audio or transcript fields. The versioned storage key leaves room for a deliberate future migration. `tests/fixtures/shares-v1.json` is a fixed fictional compatibility example, independent of the current creator function. Keep it readable as the app evolves; changes that reject existing valid records need a deliberate migration and compatibility tests, not a silent key change or history reset.
+One repository instance and the development secret are attached to `globalThis` to survive module reloads and separate route bundles within the same Node process. The repository’s Map stays private; creating another instance creates a separate empty store. Requests in that process share the data. The repository methods are asynchronous to allow replacing their implementation with a database later; there is no factory or dependency injection framework.
 
-## Tradeoffs and boundaries
+**Restarting the process clears all shares. This is local development storage, not reliable persistence on Vercel or other serverless infrastructure.** Replicas and workers have separate memory; no synchronization, backup, disk writes, or durability exists. The Map grows for the life of the process; cookie expiry does not evict records. There is no deletion endpoint or retention job. A future durable implementation must retain ownership checks and explicit privacy/retention rules.
 
-Views use in-memory navigation without separate URLs or browser-history entries. This keeps draft ownership simple for the current milestone. Refreshing returns to the writing view while saved shares remain available through history. Unsaved drafts are not persisted. If deep links or browser Back navigation become requirements, use Next.js routes rather than adding a second custom routing system.
-
-The daily reading is fixed. System serif fonts avoid external font requests. Storage is limited to the current origin and device, without encryption, backup, accounts, or synchronization.
-
-Keep components at meaningful UI boundaries. Do not extract every heading, button, or wrapper into a generic component. Introduce a shared component only when repeated behavior or styling warrants an owner. Local state is sufficient here; no context provider, reducer framework, or server-state library is needed.
+v0.1 browser persistence, compatibility fixtures, and storage-only tests are removed. There is no migration or import. No v0.3 public links or signed sharing tokens are implemented.
 
 ## Verification
 
-[CONTRIBUTING.md](../CONTRIBUTING.md#commands) owns verification commands and lint/format conventions. The ESLint configuration matches Next.js 15. Its production build checks TypeScript, so no second type check is included in `check`.
+[CONTRIBUTING.md](../CONTRIBUTING.md#commands) owns commands and test conventions. `npm run check` runs formatting, lint, temporary OpenAPI generation/Spectral lint, Node tests, and the production build/type check. Spectral owns contract conventions; Swagger Parser/Ajv retain structural and response validation. Swagger Parser validates OpenAPI 3.1; Ajv validates response bodies and required headers, including rejecting error codes assigned to another status. Unsupported-method tests assert 405 envelopes and Allow independently of supported operations.
 
-`npm run test:e2e` runs Playwright against the production build on port 3100, with isolated storage per test. It covers persistence, full-share reading, newest-first ordering, empty input, heading focus, draft retention, quota failures and successful retry, denied browser storage, and malformed history on mobile and desktop Chromium. CI installs Chromium and runs this after `check`. Firefox, Safari, and complete accessibility conformance are not covered by these tests.
-
-## Guidance behind this organization
-
-Reviewed against official documentation:
-
-- [Next.js project structure](https://nextjs.org/docs/app/getting-started/project-structure): keep framework entry points and feature ownership clear; Next.js does not mandate a universal folder tree.
-- [Next.js server and client components](https://nextjs.org/docs/app/getting-started/server-and-client-components): browser APIs and interaction belong behind a client boundary. This small feature composes its own reading rather than adding a server-content prop for minimal benefit.
-- [React state structure](https://react.dev/learn/choosing-the-state-structure): group state that changes together and avoid contradictory or redundant state.
-- [Next.js 15 ESLint configuration](https://nextjs.org/docs/15/app/api-reference/config/eslint): use framework, hooks, accessibility, and TypeScript rules appropriate to the installed version.
-- [W3C form instructions](https://www.w3.org/WAI/tutorials/forms/instructions/): provide labels and associate supporting instructions with controls.
-
-These principles inform this small app; they do not require a design system, global state manager, new server layer, or features from later milestones.
+Node tests cover validation, metadata, snapshots, ordering, ownership, signed-session expiry/configuration, byte/Unicode boundaries, and non-JSON HTTP failures. Playwright exercises real Next.js HTTP handling and mobile/desktop save, reload, history, detail, failure, loading, and pending-save flows. Tests use fictional data and no external services. Manual layout/keyboard and process-restart checks complement automated coverage.
 
 ## Intended mobile direction
 
-The long-term goal is an iPhone/Android experience. React Native with Expo is the intended option to evaluate for a native client, rather than treating this Next.js UI as directly portable. Validate recording and playback on real iOS and Android devices before committing to that stack. This is an architectural direction, not a mobile implementation or a promise of unchanged screen reuse.
-
-Preserve the small boundaries already present:
-
-- Share/reading schemas and record logic stay independent of React and browser storage. Stable UUIDs, ISO creation timestamps, and separate reading calendar dates can transfer to another client. Verify UUID generation against the chosen mobile runtime rather than assuming its globals match the browser.
-- Browser persistence stays in `storage.ts`. Mobile persistence will need its own implementation; do not stretch the synchronous localStorage API into a universal abstraction in advance.
-- HTML components, Tailwind styles, Next.js routes, and browser navigation remain web-specific. Native screens can reuse concepts and suitable data logic, not the markup unchanged.
-- When recordings are introduced, store audio separately and reference files from records. Do not add audio fields or encode recordings into share JSON in this milestone.
-- Before people rely on native local storage, decide backup, recovery, deletion, device migration, and any synchronization policy. Packaging the app does not supply those behaviors.
-
-Keep `src/` and the current single application. There is no BFF now; a server-rendered Next.js entry point does not introduce one. Add a clear server boundary when actual backend behavior exists, and consider a separately deployed BFF only when web/mobile requirements warrant it. Extract a shared package only after a second client demonstrates real reuse. No mobile SDK, empty app skeleton, monorepo, or shared storage framework is needed for this PR.
+React Native with Expo remains an option to evaluate for a future native client. Keep shared schemas independent of React, server storage behind the repository, and web components/navigation specific to this frontend. A native client will need an explicit session credential design; do not assume browser cookies transfer unchanged. Extract a shared package only when another client demonstrates reuse. This milestone adds no native skeleton, audio fields, or harness integration.
 
 ## Temporary dependency override
 
-Next.js 15.5.28 pins PostCSS 8.4.31, which is affected by [GHSA-6g55-p6wh-862q](https://github.com/advisories/GHSA-6g55-p6wh-862q) and [GHSA-r28c-9q8g-f849](https://github.com/advisories/GHSA-r28c-9q8g-f849). The scoped npm override uses PostCSS `^8.5.30` for Next.js, staying on PostCSS major 8 and resolving both reported ranges. Production build and browser tests verify this combination. Remove the override once the selected Next.js release depends on a patched version directly; do not suppress the dependency check.
+The scoped npm override keeps Next.js's PostCSS at `^8.5.30`, within major 8. It was introduced to address GHSA-6g55-p6wh-862q and GHSA-r28c-9q8g-f849. Next.js 16.4.1 still pins an earlier PostCSS release, so the override is retained and verified by the production build and browser tests. Recheck the override when upgrading Next.js; remove it once the selected release directly depends on a patched version rather than suppressing dependency checks.
+
+## Contributor documentation
+
+[CONTRIBUTING.md](../CONTRIBUTING.md#organization-and-documentation) owns the documentation checklist. Exported repository/session/fetch contracts describe trust boundaries, mutations, return values, and rejected promises or handled HTTP failures at their source. Presentation components document controlled-state/callback responsibilities without duplicating the API contract. [The glossary](DATA_GLOSSARY.md) owns data location, transmission, access loss, deletion, and backup terminology.

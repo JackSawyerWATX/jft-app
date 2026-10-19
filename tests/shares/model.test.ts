@@ -1,70 +1,47 @@
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
-import { createShare, parseShares } from '../../src/shares/model';
+import { createShareSchema, shareSchema } from '../../src/shares/model';
+import { reflection } from '../../src/shares/reflection-fixture';
 
-test('rejects empty shares and trims saved text', () => {
-  assert.throws(() => createShare(' \n '));
-  const share = createShare('  My thoughts\nare here.  ');
-  assert.equal(share.text, 'My thoughts\nare here.');
-  assert.notEqual(share.id, createShare('Another thought').id);
-  assert.ok(Number.isFinite(Date.parse(share.createdAt)));
-});
-test('round trips stored shares and orders newest first', () => {
-  const first = {
-    ...createShare('Earlier'),
-    createdAt: '2025-04-22T12:00:00Z'
-  };
-  const second = { ...createShare('Later'), createdAt: '2025-04-23T12:00:00Z' };
-  assert.deepEqual(parseShares(JSON.stringify([first, second])), [
-    second,
-    first
-  ]);
-  assert.deepEqual(parseShares(null), []);
-});
-test('rejects malformed storage instead of silently discarding history', () => {
-  for (const raw of [
-    '{',
-    '{}',
-    '[null]',
-    '[{"text":"hello"}]',
-    JSON.stringify([{ ...createShare('Valid'), createdAt: 'invalid' }])
+test('accepts and trims text; rejects blank, malformed and client metadata', () => {
+  assert.deepEqual(
+    createShareSchema.parse({ text: '  A fictional thought.\n ' }),
+    { text: 'A fictional thought.' }
+  );
+  for (const input of [
+    null,
+    {},
+    { text: '' },
+    { text: ' \n ' },
+    { text: 42 },
+    { text: 'ok', ownerId: 'forged' },
+    { text: 'ok', id: crypto.randomUUID() },
+    { text: 'ok', createdAt: new Date().toISOString() },
+    { text: 'ok', reflection }
   ]) {
-    assert.throws(() => parseShares(raw));
+    assert.equal(createShareSchema.safeParse(input).success, false);
   }
 });
 
-test('rejects records outside the saved share contract', () => {
-  const share = createShare('A fictional thought.');
-  const invalid = [
-    { ...share, id: 'not-a-uuid' },
-    { ...share, createdAt: '2025-04-23' },
-    { ...share, kind: 'audio' },
-    { ...share, text: ' \n ' },
-    { ...share, reflection: { ...share.reflection, title: '' } },
-    { ...share, reflection: { ...share.reflection, date: '2025-02-30' } }
-  ];
-  for (const value of invalid)
-    assert.throws(() => parseShares(JSON.stringify([value])));
-});
-
-test('preserves unknown fields while validating stored records', () => {
+test('validates saved share contracts and omits server ownership', () => {
   const share = {
-    ...createShare('A fictional thought.'),
-    futureMetadata: { source: 'example' }
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    kind: 'text',
+    text: 'Fictional thought.',
+    reflection
   };
-  assert.deepEqual(parseShares(JSON.stringify([share])), [share]);
-});
-
-test('reads the fixed v1 storage fixture independently of the current record creator', () => {
-  const shares = parseShares(
-    readFileSync('tests/fixtures/shares-v1.json', 'utf8')
+  assert.deepEqual(
+    shareSchema.parse({ ...share, ownerId: crypto.randomUUID() }),
+    share
   );
-  assert.equal(shares.length, 1);
-  assert.equal(shares[0].createdAt, '2025-04-23T12:34:56.000Z');
-  assert.equal(
-    shares[0].reflection.body,
-    'A fictional reading snapshot from the first storage format.'
-  );
-  assert.equal(shares[0].text, 'A fictional saved share.\nOne step at a time.');
+  for (const input of [
+    { ...share, id: 'invalid' },
+    { ...share, createdAt: '2025-01-01' },
+    { ...share, kind: 'audio' },
+    { ...share, text: ' ' },
+    { ...share, reflection: { ...reflection, date: '2025-02-30' } }
+  ]) {
+    assert.equal(shareSchema.safeParse(input).success, false);
+  }
 });

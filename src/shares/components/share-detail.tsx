@@ -1,7 +1,11 @@
 import type { Share } from '../model';
 import { dateLabel } from '../dates';
 
-/** Reads a saved share using the reading snapshot captured when it was created. */
+/**
+ * Presents a confirmed share and its original reading snapshot as escaped text.
+ * The controller supplies a validated creation/detail response; this component does
+ * not fetch, authorize, or read current reflection content in place of the snapshot.
+ */
 export function ShareDetail({ share }: { share: Share }) {
   return (
     <article className="share-card mt-8 rounded-xl border border-[var(--line)] p-6 sm:p-8">

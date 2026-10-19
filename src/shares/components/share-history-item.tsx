@@ -3,7 +3,10 @@ import { dateLabel } from '../dates';
 
 type ShareHistoryItemProps = { share: Share; onOpen: (share: Share) => void };
 
-/** Presents one saved share and opens it through the owning history screen. */
+/**
+ * Presents one validated history record with a local date/time and truncated preview.
+ * Invokes onOpen with that record; the parent owns the detail request and its errors.
+ */
 export function ShareHistoryItem({ share, onOpen }: ShareHistoryItemProps) {
   const createdAt = new Date(share.createdAt);
   return (

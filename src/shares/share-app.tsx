@@ -2,12 +2,10 @@
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Share } from './model';
-import { readShares, saveShare } from './storage';
+import { readShare, saveShare } from './api';
 import { ShareForm } from './components/share-form';
-import {
-  ShareHistory,
-  type ShareHistoryState
-} from './components/share-history';
+import { ShareHistory } from './components/share-history';
+import { useShareHistory } from './use-share-history';
 import { ShareDetail } from './components/share-detail';
 import { ReflectionReading } from './components/reflection-reading';
 import { AppHeader } from '../components/app-header';
@@ -15,6 +13,11 @@ import { AppFooter } from '../components/app-footer';
 
 type Screen =
   { view: 'today' | 'past' } | { view: 'saved' | 'detail'; share: Share };
+type DetailState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'failed'; message: string };
+
 const screenCopy = {
   today: {
     title: 'Write your share',
@@ -34,51 +37,81 @@ const screenCopy = {
   }
 };
 
-/** Owns the local writing, confirmation, history, and full-share views. */
+/**
+ * Owns the writing draft, BFF requests, view transitions, and heading focus.
+ * Drafts survive in-app navigation; only a confirmed save clears them. Pending saves
+ * block duplicate submissions, request counters ignore stale results, and API errors
+ * are rendered in the relevant view rather than escaping from event handlers.
+ * Navigation is React state only: refreshing returns to writing and loses the draft.
+ */
 export function ShareApp() {
   const [screen, setScreen] = useState<Screen>({ view: 'today' });
   const { view } = screen;
   const [text, setText] = useState('');
-  const [history, setHistory] = useState<ShareHistoryState>({
-    status: 'loading'
-  });
+  const { history, sessionReady, refresh: loadHistory } = useShareHistory();
   const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savePending = useRef(false);
+  const detailRequest = useRef(0);
+  const [detailState, setDetailState] = useState<DetailState>({
+    status: 'idle'
+  });
   const heading = useRef<HTMLHeadingElement>(null);
   const navigated = useRef(false);
 
-  useEffect(() => {
-    try {
-      setHistory({ status: 'loaded', shares: readShares(localStorage) });
-    } catch {
-      setHistory({
-        status: 'failed',
-        message:
-          'Your saved shares could not be read. Check that browser storage is available, then refresh. Existing data has not been changed.'
-      });
-    }
-  }, []);
+  useEffect(
+    () => () => {
+      detailRequest.current++;
+    },
+    []
+  );
   useEffect(() => {
     if (navigated.current) heading.current?.focus();
     navigated.current = true;
   }, [view]);
   function navigate(next: Screen) {
+    detailRequest.current++;
+    setDetailState({ status: 'idle' });
     setScreen(next);
+    if (next.view === 'past' && sessionReady) void loadHistory();
     window.scrollTo({ top: 0 });
   }
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function openShare(id: string) {
+    const requestId = ++detailRequest.current;
+    setDetailState({ status: 'loading' });
     try {
-      const { share, shares: next } = saveShare(localStorage, text);
-      setHistory({ status: 'loaded', shares: next });
-      setText('');
-      setSaveError('');
-      navigate({ view: 'saved', share });
+      const share = await readShare(id);
+      if (requestId === detailRequest.current)
+        navigate({ view: 'detail', share });
     } catch {
+      if (requestId === detailRequest.current)
+        setDetailState({
+          status: 'failed',
+          message: 'This share could not be opened. Please try again.'
+        });
+    }
+  }
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (savePending.current || !sessionReady) return;
+    if (!text.trim()) {
+      setSaveError('Write a few words before saving your share.');
+      return;
+    }
+    savePending.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const share = await saveShare(text);
+      setText('');
+      navigate({ view: 'saved', share });
+    } catch (cause) {
       setSaveError(
-        text.trim()
-          ? 'Your share could not be saved. Your words are still here. Check browser storage or available space and try again.'
-          : 'Write a few words before saving your share.'
+        `Your share could not be saved. Your words are still here. ${cause instanceof Error ? cause.message : 'Check your connection and try again.'}`
       );
+    } finally {
+      savePending.current = false;
+      setSaving(false);
     }
   }
   const { title, description } = screenCopy[view];
@@ -116,7 +149,7 @@ export function ShareApp() {
         >
           {description}
         </p>
-        {history.status === 'failed' && (
+        {view === 'past' && history.status === 'failed' && (
           <p
             role="alert"
             className="error mt-6 rounded-xl border p-4 text-sm leading-relaxed"
@@ -124,10 +157,31 @@ export function ShareApp() {
             {history.message}
           </p>
         )}
+        {view === 'today' &&
+          !sessionReady &&
+          (history.status === 'failed' ? (
+            <div className="mt-6">
+              <p role="alert">
+                Your private session could not be prepared. Your words are still
+                here. {history.message}
+              </p>
+              <button
+                className="secondary mt-4 w-full"
+                onClick={() => void loadHistory()}
+              >
+                Try again
+              </button>
+            </div>
+          ) : (
+            <p role="status" className="mt-6">
+              Preparing your private session…
+            </p>
+          ))}
         {view === 'today' && (
           <ShareForm
             text={text}
-            disabled={history.status === 'loading'}
+            disabled={saving || !sessionReady}
+            saving={saving}
             error={saveError}
             onTextChange={setText}
             onSave={save}
@@ -137,8 +191,26 @@ export function ShareApp() {
           <ShareHistory
             history={history}
             onWrite={() => navigate({ view: 'today' })}
-            onOpen={(share) => navigate({ view: 'detail', share })}
+            onOpen={(share) => {
+              if (detailState.status !== 'loading') void openShare(share.id);
+            }}
           />
+        )}
+        {view === 'past' && detailState.status === 'loading' && (
+          <p role="status">Opening your share…</p>
+        )}
+        {view === 'past' && detailState.status === 'failed' && (
+          <p role="alert" className="error mt-6 rounded-xl border p-4">
+            {detailState.message}
+          </p>
+        )}
+        {view === 'past' && history.status === 'failed' && (
+          <button
+            className="secondary mt-4 w-full"
+            onClick={() => void loadHistory()}
+          >
+            Try again
+          </button>
         )}
         {(screen.view === 'saved' || screen.view === 'detail') && (
           <>

@@ -1,6 +1,6 @@
 import { ShareApp } from '../shares/share-app';
 
-/** Keeps the route entry separate from the browser-only reflection experience. */
+/** Renders the interactive reflection/share client from the App Router entry. */
 export default function Home() {
   return <ShareApp />;
 }

@@ -1,4 +1,4 @@
-import { reflection } from '../model';
+import { reflection } from '../reflection-fixture';
 import { readingDateLabel } from '../dates';
 
 /** Displays the fixed reading for this milestone. */

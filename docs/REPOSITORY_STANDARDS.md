@@ -1,10 +1,10 @@
 # Shared repository standards
 
-This is the reference policy for `jft-app` and a future matching change in `jft-harness`. This PR changes only `jft-app`. Copy the common tooling and documentation conventions; preserve each project's product behavior and architecture.
+This is the reference policy for `jft-app` and a future matching change in `jft-harness`. Copy the common tooling and documentation conventions; preserve each project's product behavior and architecture. Changes to this app do not configure or integrate the harness.
 
 ## 1. One verification command
 
-Use `npm run check` locally and in CI after `npm ci`. [CONTRIBUTING.md](../CONTRIBUTING.md#commands) owns the app's command descriptions. Next.js 15's build already checks TypeScript; do not run a second type check afterward. The harness copy should include its standalone type check because it has no equivalent build.
+Use `npm run check` locally and in CI after `npm ci`. [CONTRIBUTING.md](../CONTRIBUTING.md#commands) owns the app's command descriptions. Next.js 16's build already checks TypeScript; do not run a second type check afterward. The harness copy should include its standalone type check because it has no equivalent build.
 
 The app additionally runs Playwright after `check`; the harness need not copy UI tests or Next.js lint presets. Both default suites use fictional data and require no live service credentials.
 
@@ -18,9 +18,9 @@ Copy [.github/pull_request_template.md](../.github/pull_request_template.md) and
 
 ## 4. Repository settings
 
-These are deliberate configuration decisions, **not settings applied by files in this PR**. Current metadata reports that squash, merge commits, and rebase merges are all allowed; the desired policy below is not yet enforced.
+These are desired configuration decisions, **not settings enforced by repository files**. This document is not a live report of GitHub enforcement. Inspect actual repository settings/rules before claiming a policy is active; do not infer enforcement from a merged PR or committed workflow.
 
-After this initial PR is merged and the workflows have registered successful checks, configure both repositories in GitHub:
+After the workflows have registered successful checks, configure and verify the following policy in each repository:
 
 | Setting                   | Decision                                                                      |
 | ------------------------- | ----------------------------------------------------------------------------- |
@@ -65,4 +65,4 @@ Dependency Review blocks newly introduced high/critical known vulnerabilities on
 2. Add the harness-specific `check` sequence from section 1 and invoke it from a CI job named `Verify`.
 3. Adapt `CONTRIBUTING.md` setup and commands for the existing CLI. Copy the glossary and this policy, updating actual enforcement status.
 4. Retain its existing CodeQL and Dependency Review behavior, aligning job names and schedules with these files. Retain its conventional title validator.
-5. Apply and verify the repository settings only after the checks exist. Do not copy Next.js commands, UI structure, or localStorage behavior into the harness.
+5. Apply and verify the repository settings only after the checks exist. Do not copy Next.js commands, UI structure, or app persistence behavior into the harness.

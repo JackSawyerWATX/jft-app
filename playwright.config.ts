@@ -24,6 +24,10 @@ export default defineConfig({
   webServer: {
     command: 'npm run start -- --port 3100',
     url: 'http://127.0.0.1:3100',
-    reuseExistingServer: false
+    reuseExistingServer: false,
+    // Synthetic secret for the isolated production test process.
+    env: {
+      SESSION_SECRET: 'fictional-playwright-session-secret-at-least-32-bytes'
+    }
   }
 });

@@ -4,15 +4,22 @@ import { LockIcon } from './lock-icon';
 type ShareFormProps = {
   text: string;
   disabled: boolean;
+  saving: boolean;
   error: string;
   onTextChange: (text: string) => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-/** Keeps text entry accessible while its parent owns the draft and save operation. */
+/**
+ * Controlled draft form; the parent owns text, errors, and asynchronous persistence.
+ * disabled blocks submission; saving also makes the textarea read-only. Empty trimmed
+ * input disables the button, but server validation remains authoritative. onSave owns
+ * preventDefault and failure handling. Help/error IDs describe the field accessibly.
+ */
 export function ShareForm({
   text,
   disabled,
+  saving,
   error,
   onTextChange,
   onSave
@@ -29,6 +36,7 @@ export function ShareForm({
         id={fieldId}
         aria-describedby={error ? `${helpId} ${errorId}` : helpId}
         value={text}
+        readOnly={saving}
         onChange={(event) => onTextChange(event.target.value)}
         placeholder="Start wherever you are…"
         className="share-textarea"
@@ -37,7 +45,7 @@ export function ShareForm({
         id={helpId}
         className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-[var(--muted)]"
       >
-        <LockIcon /> Saved only in this browser. Your words stay on this device.
+        <LockIcon /> Saved privately on the server for this browser session.
       </p>
       {error && (
         <p
@@ -53,7 +61,13 @@ export function ShareForm({
         disabled={disabled || !text.trim()}
         type="submit"
       >
-        Save privately <span aria-hidden="true">→</span>
+        {saving ? (
+          'Saving…'
+        ) : (
+          <>
+            Save privately <span aria-hidden="true">→</span>
+          </>
+        )}
       </button>
     </form>
   );

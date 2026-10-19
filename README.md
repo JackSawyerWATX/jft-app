@@ -1,10 +1,10 @@
-# Doorknob v0.1
+# Doorknob v0.2
 
-Doorknob is a mobile-first recovery reflection app. Read a daily reflection, write a text share, save it privately in this browser, and revisit past shares.
+Doorknob is a mobile-first recovery reflection app. Read a daily reflection, write a text share, save it privately through the Next.js Backend for Frontend (BFF), and revisit past shares.
 
 ## Getting started
 
-Use Node.js **24 LTS**, pinned in `.nvmrc` and required by `package.json`:
+Use Node.js **24 LTS**, pinned in `.nvmrc`:
 
 ```bash
 nvm use
@@ -12,44 +12,51 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. No credentials or environment variables are required.
+Open http://localhost:3000. Local development needs no credentials: a random session signing secret is generated for the running process. Optionally set `SESSION_SECRET` to a random value of at least 32 bytes in `.env.local`. Never commit secrets or personal recovery text.
 
-For a production run:
+For a production-mode local run, create `.env.local` first:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+```
+
+Copy the generated value into `.env.local` as `SESSION_SECRET=<generated value>`, then run:
 
 ```bash
 npm run build
 npm start
 ```
 
+Production requires this secret and sets Secure cookies. Missing or short production secrets cause API requests to return a generic 500; the app does not supply a production fallback. A signing-key change invalidates existing cookies. Use HTTPS when hosting; browser handling of Secure cookies on plain HTTP localhost can vary. Use `npm run dev` for ordinary local development.
+
 ## Writing and reviewing shares
 
 1. Read the reflection and write in the multiline textbox.
-2. Choose **Save privately** to see the confirmation and saved text.
-3. Open **Past shares** to browse newest first, then select an entry to read it in full.
+2. Choose **Save privately**. Confirmation appears only after the server saves your text.
+3. Open **Past shares** to browse newest first, then select an entry to fetch and read it in full.
 
-Blank or whitespace-only shares cannot be saved. Navigating between views preserves an unfinished draft. A failed save keeps the draft and shows an error; malformed stored history is never silently replaced.
+Blank shares cannot be saved. Text is limited to 10,000 Unicode code points, and the full JSON request is limited to 64 KiB. Oversized-input failures retain the draft for editing. Navigating between views preserves drafts. Failed saves retain your words and show an error. Pending saves disable editing and duplicate submissions. History and detail requests have loading and error feedback; failed history requests can be retried.
 
-The reading and April 23, 2025 date are deliberately hardcoded. The reflection body is original placeholder copy.
+The reading and April 23, 2025 date remain deliberate placeholders.
 
-## Storage and limitations
+## Persistence and privacy limitations
 
-Shares live in localStorage under `doorknob.shares.v1`, scoped to the current browser and origin. Each record contains a unique ID, ISO creation timestamp, text, a reflection snapshot, and an explicit `kind: 'text'` discriminator.
+Shares are sent to the same-origin Next.js server and stored in a process-local Map. Each record has a server-generated UUID, ISO timestamp, `kind: 'text'`, text, reading snapshot, and anonymous owner ID in the server record. Share JSON omits the ownerId field. There is no browser storage persistence or migration of v0.1 test data.
 
-Clearing site data removes shares. Browser storage is not encrypted or backed up. Drafts stay in memory until saved and are lost on refresh. Simultaneous writes in multiple tabs are not transactional.
+A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It expires after 30 days and is Secure in production. Different browser sessions cannot list or read one another's shares. Invalid or expired credentials receive 401. Clear site cookies to start a fresh session if this occurs; **clearing cookies loses access to existing shares**, even while those records remain in server memory. The signed cookie is readable, not encrypted, and must be treated as a bearer credential. Tabs sharing site cookies share an owner; use separate profiles/cookie jars to test isolation. Cookies do not provide login accounts or recovery. Saving waits for a successful initial session read; initialization failures retain the draft and offer retry. Foreign-origin POSTs are rejected before session creation and never replace the cookie. This prototype now uses Hono’s signed-cookie format; clear any cookie from the earlier development implementation if it receives 401. There is no cookie migration.
 
-This milestone includes no audio, transcription, AI, authentication, database, server endpoints, or sharing with other people.
+**This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts live only in React memory and disappear on refresh. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
+
+No public sharing links, audio, transcription, AI, registration, real reading feeds, or harness integration are included.
 
 ## Validation
 
 ```bash
 npm run check
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e
 ```
 
-GitHub Actions runs the same `npm run check` command after `npm ci` on pull requests and pushes to `main`. See [contributor commands](CONTRIBUTING.md#commands) for its steps. The Next.js build includes TypeScript validation. Tests require no credentials or external services.
-
-Unit tests cover share creation, validation, ordering, and storage failures. Playwright tests cover save/reload persistence, full-share reading, ordering, draft retention, and storage errors in mobile and desktop Chromium. CI runs them after `check`.
-
-To run browser tests locally:
+`check` runs formatting, lint, Node tests, and a production build including TypeScript validation. Browser tests run separately against a production server on port 3100 with a synthetic signing secret. All test content is fictional. If Chromium is not installed:
 
 ```bash
 npx playwright install chromium
@@ -57,53 +64,48 @@ npm run build
 npm run test:e2e
 ```
 
-Playwright starts its own production server on port 3100. Browser tests are separate from `npm test` and `npm run check` because they require a browser installation. All test content is fictional.
+Omit `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` when using Playwright's installed browser. Tests validate the generated OpenAPI document and actual responses with Swagger Parser and Ajv. They cover HTTP headers/methods, stable error codes, input-size boundaries, API validation and metadata, ownership/session credential checks, save/reload/detail flows, ordering, API failures, draft retention, duplicate prevention, loading, and empty history in mobile and desktop Chromium.
 
 Manual checks:
 
-1. Confirm blank and whitespace-only input cannot be saved.
-2. Save a multiline share. Check the confirmation and full text.
-3. Refresh, open **Past shares**, and reopen the entry. Save another and confirm newest-first ordering.
-4. Check phone and desktop layouts and keyboard navigation.
-5. Block site storage or simulate a quota error. Confirm an error appears and the draft remains without a success confirmation.
-6. Set `doorknob.shares.v1` to malformed JSON in browser storage. Reload and confirm the error appears and saving does not overwrite the existing value.
+1. Confirm blank text cannot be saved. Navigate between views and confirm an unfinished draft remains.
+2. Save a multiline share, refresh, and reopen it from **Past shares**.
+3. Open a separate private browser session and confirm its history is empty and the first session's share ID returns 404.
+4. Simulate a failed POST in browser developer tools; verify the draft remains with no confirmation.
+5. Check phone and desktop layouts, keyboard navigation, and heading focus.
+6. Restart the server and confirm history is empty. Clear cookies and confirm previous shares are inaccessible.
 
 ## Project layout
 
-Source and tests are grouped by responsibility, with direct imports and no barrel files or path aliases.
-
 ```text
 src/
-  app/                  page.tsx, layout.tsx, globals.css — route entry and theme
+  app/                  App Router entry, layout, theme
+    api/shares/         Next.js exports for private share operations
+    api/openapi.json/   generated OpenAPI 3.1 contract
   components/           app-wide header and footer
   shares/
-    share-app.tsx       client state and screen transitions
+    share-app.tsx       React state, requests, and screen transitions
+    api.ts              browser fetch and response validation
     components/         reading, form, history, and detail presentation
-    model.ts            share records, creation, and validation
-    storage.ts          validated localStorage reads and writes
+    model.ts            shared Zod schemas, inferred types, and text limit
+    reflection-fixture.ts fictional daily reading
+    errors.ts           shared stable error codes and envelope
+    server/
+      operations/       create, list, read contracts and typed handlers
+      resource-methods.ts HEAD/OPTIONS/405 handling for share resources
+      app.ts            operation registration and dispatch
+      openapi.ts        shared contract helpers and metadata
+    use-share-history.ts History loading and initial session bootstrap
     dates.ts            saved-date formatting
 tests/
-  shares/               unit tests for data and persistence
-  e2e/                  Playwright tests for user flows
-docs/
-  ARCHITECTURE.md       responsibilities, tradeoffs, and official guidance
-.github/workflows/      verification, title validation, and security scans
+  shares/               Node tests for schemas, routes, repository, and dates
+  e2e/                  Playwright user flows
 ```
 
-See [the architecture](docs/ARCHITECTURE.md) for data flow and implementation decisions, including the [intended mobile direction](docs/ARCHITECTURE.md#intended-mobile-direction).
+Open http://localhost:3000/api/openapi.json for the generated contract. TypeScript route/Zod definitions are the source of truth. `npm run openapi:lint` generates ignored `.tmp/openapi.yaml` and checks it with Spectral; CI also uploads the YAML as the `openapi` workflow artifact. Generated YAML is not committed.
 
-## Contributing and repository standards
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for commands, formatting, documentation, and PR conventions. [Shared repository standards](docs/REPOSITORY_STANDARDS.md) records the seven workflow decisions and the copy plan for `jft-harness`, including GitHub settings that still require configuration. [The data glossary](docs/DATA_GLOSSARY.md) defines terminology shared by both repositories.
-
-Dependabot proposes weekly npm and GitHub Actions updates. Dependency Review checks newly introduced high/critical vulnerabilities, and CodeQL scans TypeScript. These workflows do not configure branch protection or repository security features by themselves.
+See [the private API reference and curl example](docs/API.md), [architecture](docs/ARCHITECTURE.md), [contributor commands](CONTRIBUTING.md#commands), [repository standards](docs/REPOSITORY_STANDARDS.md), and [data glossary](docs/DATA_GLOSSARY.md).
 
 ## Installation troubleshooting
 
-This project uses public npm packages and does not require npm login. If `npm ci` returns E401 on a machine configured for a private company registry, try:
-
-```bash
-npm ci --registry=https://registry.npmjs.org/
-```
-
-A failed installation leaves `next` unavailable, so fix the install before running `npm run dev`. Do not commit registry credentials or change shared company authentication to run this app.
+This project uses public npm packages and does not require npm login. For E401 on a machine configured for a private company registry, try `npm ci --registry=https://registry.npmjs.org/`. Fix installation errors before starting the app. Do not commit registry credentials or change shared company authentication.
