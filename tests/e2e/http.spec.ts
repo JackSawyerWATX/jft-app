@@ -17,6 +17,7 @@ test('serves OpenAPI and honors resource HTTP methods, headers, and sessions', a
   });
   expect(created.status()).toBe(201);
   const share = await created.json();
+  const ownerCookie = created.headers()['set-cookie'].split(';')[0];
   const location = `/api/shares/${share.id}`;
   expect(created.headers().location).toBe(location);
   expect(share.ownerId).toBeUndefined();
@@ -25,7 +26,7 @@ test('serves OpenAPI and honors resource HTTP methods, headers, and sessions', a
     ['/api/shares', 'GET, HEAD, POST, OPTIONS'],
     [location, 'GET, HEAD, OPTIONS']
   ]) {
-    const head = await request.head(path);
+    const head = await request.head(path, { headers: { Cookie: ownerCookie } });
     expect(head.status()).toBe(200);
     expect(await head.body()).toHaveLength(0);
     expect(head.headers()['cache-control']).toBe('private, no-store');
@@ -46,10 +47,8 @@ test('serves OpenAPI and honors resource HTTP methods, headers, and sessions', a
     const invalid = await request.get(path, {
       headers: { Cookie: 'doorknob-session=forged' }
     });
-    expect(invalid.status()).toBe(401);
-    expect(invalid.headers()['www-authenticate']).toBe(
-      'DoorknobSession realm="doorknob"'
-    );
-    expect((await invalid.json()).error.code).toBe('INVALID_SESSION');
+    expect(invalid.status()).toBe(path === '/api/shares' ? 200 : 404);
+    expect(invalid.headers()['set-cookie']).toBeDefined();
+    expect(invalid.headers()['www-authenticate']).toBeUndefined();
   }
 });

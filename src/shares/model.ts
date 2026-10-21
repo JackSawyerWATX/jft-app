@@ -13,11 +13,7 @@ const reflectionSchema = z.object({
   body: nonblankText
 });
 
-/**
- * Strict POST body contract: trim text, reject blank input and all extra fields.
- * IDs, timestamps, kind, reading snapshots, and ownership are assigned server-side.
- * Parsing invalid input throws ZodError; handlers use safeParse to return 400.
- */
+/** Accept text only; the server supplies ownership, metadata, and the reading snapshot. */
 export const createShareSchema = z.strictObject({
   text: z
     .string()
@@ -34,21 +30,27 @@ export const createShareSchema = z.strictObject({
     })
 });
 
-/**
- * Owner-visible response contract; parsing strips fields not declared here, including
- * the stored ownerId. Validates UUID/time/kind and the complete reading snapshot.
- * Parsing invalid records throws ZodError; this schema does not authorize access.
- * Route handlers must perform the session/ownership checks before projecting data.
- */
+/** Strip server-only fields such as ownerId; callers must check ownership separately. */
 export const shareSchema = z.object({
   id: z.uuid(),
   createdAt: z.iso.datetime({ offset: true }),
   kind: z.literal('text'),
   reflection: reflectionSchema,
-  text: nonblankText
+  text: nonblankText,
+  shareUrl: z
+    .string()
+    .regex(
+      /^\/s\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    )
 });
 
 /** Reading snapshot with an ISO calendar date; saved snapshots do not follow later edits. */
 export type Reflection = z.infer<typeof reflectionSchema>;
-/** Validated API share without ownerId; its TypeScript shape alone does not grant access. */
+
 export type Share = z.infer<typeof shareSchema>;
+
+/** Public projection: no ID, owner, creation metadata, or history. Authorization is server-only. */
+export const publicShareSchema = shareSchema.pick({
+  reflection: true,
+  text: true
+});

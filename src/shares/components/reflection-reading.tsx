@@ -1,7 +1,6 @@
 import { reflection } from '../reflection-fixture';
 import { readingDateLabel } from '../dates';
 
-/** Displays the fixed reading for this milestone. */
 export function ReflectionReading() {
   return (
     <section className="reading text-center" aria-label="Today's reflection">

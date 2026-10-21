@@ -1,6 +1,6 @@
-# Doorknob v0.2
+# Doorknob v0.3
 
-Doorknob is a mobile-first recovery reflection app. Read a daily reflection, write a text share, save it privately through the Next.js Backend for Frontend (BFF), and revisit past shares.
+Doorknob is a mobile-first recovery reflection app. Read a daily reflection, write a text share, save it privately through the Next.js Backend for Frontend (BFF), revisit past shares, and intentionally send an expiring reading link to another person.
 
 ## Getting started
 
@@ -27,7 +27,22 @@ npm run build
 npm start
 ```
 
-Production requires this secret and sets Secure cookies. Missing or short production secrets cause API requests to return a generic 500; the app does not supply a production fallback. A signing-key change invalidates existing cookies. Use HTTPS when hosting; browser handling of Secure cookies on plain HTTP localhost can vary. Use `npm run dev` for ordinary local development.
+Production requires `SESSION_SECRET` and sets Secure cookies. Missing or short production secrets cause API requests to return a generic 500; the app does not supply a production fallback. A signing-key change invalidates existing cookies. Use HTTPS when hosting; browser handling of Secure cookies on plain HTTP localhost can vary. Use `npm run dev` for ordinary local development.
+
+## Sharing with another person
+
+Save a share, then tap **Share with fellow alcoholic** beneath your thoughts on the card. It opens the device's share sheet directly. Browsers without native sharing copy the link; if clipboard access is unavailable, an inline selectable link field appears. The same button and share icon are available in past-share details. Saving prepares the URL but never sends it to anyone.
+
+Long thoughts show a short preview ending in `...`; **Read more** expands them and **Show less** collapses them on both owner and recipient screens. Recipients can read the original reading and thoughts without an account, then choose **Write your share** to open the homepage. They cannot browse the sender's history. Sharing URLs contain only a cryptographically random UUID. Anyone who learns that UUID can read that share during its lifetime; treat the full URL and share IDs as credentials and never log them. No separate sharing secret is required. Technical lifetime and storage details are in [architecture](docs/ARCHITECTURE.md#public-sharing-boundary).
+
+### Manual check across two browser sessions
+
+1. Run `npm run dev`, write fictional text, and **Save privately** in browser A.
+2. Tap the share icon. Confirm it opens native sharing or copies the link directly. If both APIs are unavailable, copy from the fallback field.
+3. Open the link in a fresh private browser B. Confirm the original reading and written thoughts appear without a login or session cookie.
+4. In B, the home page's **Past shares** is empty and the sender's private detail returns 404.
+5. In A, open the entry from **Past shares** and tap its icon; it uses the same URL without requesting a new link.
+6. Tamper with a URL parameter and confirm the recipient page says **This share is unavailable**. Restart the server and confirm its in-memory shares are gone.
 
 ## Writing and reviewing shares
 
@@ -43,11 +58,11 @@ The reading and April 23, 2025 date remain deliberate placeholders.
 
 Shares are sent to the same-origin Next.js server and stored in a process-local Map. Each record has a server-generated UUID, ISO timestamp, `kind: 'text'`, text, reading snapshot, and anonymous owner ID in the server record. Share JSON omits the ownerId field. There is no browser storage persistence or migration of v0.1 test data.
 
-A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It expires after 30 days and is Secure in production. Different browser sessions cannot list or read one another's shares. Invalid or expired credentials receive 401. Clear site cookies to start a fresh session if this occurs; **clearing cookies loses access to existing shares**, even while those records remain in server memory. The signed cookie is readable, not encrypted, and must be treated as a bearer credential. Tabs sharing site cookies share an owner; use separate profiles/cookie jars to test isolation. Cookies do not provide login accounts or recovery. Saving waits for a successful initial session read; initialization failures retain the draft and offer retry. Foreign-origin POSTs are rejected before session creation and never replace the cookie. This prototype now uses Hono’s signed-cookie format; clear any cookie from the earlier development implementation if it receives 401. There is no cookie migration.
+A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It expires after 30 days and is Secure in production. Different browser sessions cannot list or read one another's shares through the private endpoints; a shared UUID link separately grants read access to that share. Missing, invalid or expired cookies automatically start a fresh empty anonymous session. This is disposable prototype behavior: old ownership is never restored from invalid credentials, and previous records may remain in server memory but are inaccessible to the new owner. The signed cookie is readable, not encrypted, and must be treated as a bearer credential. Tabs sharing site cookies share an owner; use separate profiles/cookie jars to test isolation. Cookies do not provide login accounts or recovery. Saving waits for a successful initial session read; initialization failures retain the draft and offer retry. Foreign-origin POSTs are rejected before session creation and never replace the cookie. This prototype now uses Hono’s signed-cookie format; old-format cookies automatically start a fresh empty session. There is no cookie migration.
 
 **This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts live only in React memory and disappear on refresh. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
-No public sharing links, audio, transcription, AI, registration, real reading feeds, or harness integration are included.
+Signed sharing links are optional: saving prepares a URL but never sends it automatically. No audio, transcription, AI, registration, real reading feeds, or harness integration are included.
 
 ## Validation
 

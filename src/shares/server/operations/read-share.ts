@@ -24,7 +24,6 @@ const idParams = z.object({
     })
 });
 
-/** Detail contract; nonexistent records and ownership mismatches intentionally share a 404. */
 export const readShareRoute = createRoute({
   middleware: [anonymousSession] as const,
   method: 'get',
@@ -48,12 +47,7 @@ export const readShareRoute = createRoute({
   }
 });
 
-/**
- * Reads an owner-scoped share; missing and other-owner IDs both return 404.
- * @param c - Request context with verified ownership and validated inputs.
- * @returns The documented JSON success or controlled failure response.
- * @throws On repository/serialization failure; the shared error handler returns 500.
- */
+/** Missing records and ownership mismatches deliberately return the same 404. */
 export const readShare: RouteHandler<
   typeof readShareRoute,
   SessionEnvironment

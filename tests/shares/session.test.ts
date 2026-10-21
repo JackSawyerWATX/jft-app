@@ -26,3 +26,35 @@ test('cookie issuance validates payload fields before signing', async () => {
   );
   assert.equal(response.headers.get('set-cookie'), null);
 });
+
+test('stale signing keys and expired credentials start fresh owners without trusting their stored owner IDs', async (t) => {
+  const { serializeSigned } = await import('hono/utils/cookie');
+  const { randomUUID } = await import('node:crypto');
+  const { InMemoryShareRepository } =
+    await import('../../src/shares/server/repository');
+  const now = 1_800_000_000;
+  const ownerId = randomUUID();
+  const key = 'fictional-current-session-key-at-least-32-bytes';
+  t.mock.property(process, 'env', { ...process.env, SESSION_SECRET: key });
+  t.mock.method(Date, 'now', () => now * 1000);
+  const store = new InMemoryShareRepository();
+  const saved = await store.create(ownerId, 'A fictional private record.');
+  for (const [expiresAt, signingKey] of [
+    [now + 3600, 'fictional-previous-key-at-least-32-bytes'],
+    [now - 1, key]
+  ] as const) {
+    const cookie = await serializeSigned(
+      'doorknob-session',
+      JSON.stringify({ ownerId, expiresAt }),
+      signingKey
+    );
+    const fresh = await getSession(
+      new Request('http://localhost', { headers: { cookie } })
+    );
+    assert.ok(fresh.newSession);
+    assert.notEqual(fresh.ownerId, ownerId);
+    assert.deepEqual(await store.listByOwner(fresh.ownerId), []);
+    assert.equal(await store.findByOwner(saved.id, fresh.ownerId), null);
+    assert.ok(await store.findByOwner(saved.id, ownerId));
+  }
+});

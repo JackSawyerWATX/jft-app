@@ -6,10 +6,7 @@ import Ajv2020, { type AnySchema } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import { dispatch, getOpenApiDocument } from '../../src/shares/server/app';
 import { MAX_SHARE_TEXT_LENGTH } from '../../src/shares/model';
-import {
-  MAX_SHARE_REQUEST_BYTES,
-  SESSION_CHALLENGE
-} from '../../src/shares/server/http';
+import { MAX_SHARE_REQUEST_BYTES } from '../../src/shares/server/http';
 import {
   collectionAllow,
   detailAllow
@@ -165,8 +162,9 @@ test('actual create/list/detail and error responses conform to OpenAPI, includin
     '/api/shares',
     'doorknob-session=forged'
   );
-  assert.equal(invalid.headers.get('WWW-Authenticate'), SESSION_CHALLENGE);
-  assert.equal(invalid.headers.get('set-cookie'), null);
+  assert.equal(invalid.status, 200);
+  assert.equal(invalid.headers.get('WWW-Authenticate'), null);
+  assert.ok(invalid.headers.get('set-cookie'));
   await contract(invalid);
 });
 
@@ -242,7 +240,7 @@ test('HEAD enforces ownership/session rules with no bodies; OPTIONS and 405 adve
     assert.equal(head.status, 200);
     await contract(head, specPath, 'head');
     const unauthorized = await request('HEAD', path, 'doorknob-session=forged');
-    assert.equal(unauthorized.status, 401);
+    assert.equal(unauthorized.status, path === '/api/shares' ? 200 : 404);
     await contract(unauthorized, specPath, 'head');
     const options = await request('OPTIONS', path, 'doorknob-session=forged');
     assert.equal(options.status, 204);
@@ -319,13 +317,41 @@ test('error contracts reject codes belonging to a different HTTP status', async 
       Response.json(
         { error: { code: 'INTERNAL_ERROR', message: 'Fictional error.' } },
         {
-          status: 401,
+          status: 404,
           headers: {
-            'Cache-Control': 'private, no-store',
-            'WWW-Authenticate': SESSION_CHALLENGE
+            'Cache-Control': 'private, no-store'
           }
         }
-      )
+      ),
+      '/api/shares/{id}',
+      'get'
     )
+  );
+});
+
+test('save-time link and public responses conform to generated contracts', async () => {
+  const created = await request(
+    'POST',
+    '/api/shares',
+    undefined,
+    JSON.stringify({ text: 'A fictional shared contract thought.' })
+  );
+  const saved = await created.clone().json();
+  await contract(created, '/api/shares', 'post');
+  const publicPath = `/api/public/shares/${saved.id}`;
+  await contract(await request('GET', publicPath), '/api/public/shares/{id}');
+  await contract(
+    await request('HEAD', publicPath),
+    '/api/public/shares/{id}',
+    'head'
+  );
+  await contract(
+    await request('GET', '/api/public/shares/invalid'),
+    '/api/public/shares/{id}'
+  );
+  await contract(
+    await request('OPTIONS', publicPath),
+    '/api/public/shares/{id}',
+    'options'
   );
 });

@@ -4,20 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { readShares } from './api';
 import type { Share } from './model';
 
-/**
- * History request state: only loaded carries shares, and only an empty loaded list
- * means no records exist. failed carries a displayable message, not partial results.
- */
+/** Only a successfully loaded empty array means there are no saved shares. */
 export type ShareHistoryState =
   | { status: 'loading' }
   | { status: 'failed'; message: string }
   | { status: 'loaded'; shares: Share[] };
 
-/**
- * Owns history requests and the initial session bootstrap independently of the draft.
- * @returns History, successful session readiness, and a fresh-read callback. Refreshes
- * ignore stale results; failures become display state. Saving stays blocked until a read succeeds, including after bootstrap failure.
- */
+/** Ignore stale reads and block saving until session bootstrap succeeds. */
 export function useShareHistory() {
   const [history, setHistory] = useState<ShareHistoryState>({
     status: 'loading'

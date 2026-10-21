@@ -11,7 +11,6 @@ import {
 } from '../openapi';
 import { anonymousSession } from '../middleware';
 
-/** Collection read contract; history is private and newest first, with [] for no shares. */
 export const listSharesRoute = createRoute({
   middleware: [anonymousSession] as const,
   method: 'get',
@@ -33,12 +32,7 @@ export const listSharesRoute = createRoute({
   }
 });
 
-/**
- * Lists the verified owner’s shares and projects out server-only ownership.
- * @param c - Request context with verified ownership and validated inputs.
- * @returns The documented JSON success or controlled failure response.
- * @throws On repository/serialization failure; the shared error handler returns 500.
- */
+/** Return only this owner’s shares, omitting server-only ownership fields. */
 export const listShares: RouteHandler<
   typeof listSharesRoute,
   SessionEnvironment

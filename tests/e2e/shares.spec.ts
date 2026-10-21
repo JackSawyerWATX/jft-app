@@ -274,16 +274,16 @@ test('real HTTP requests retain shares and isolate browser sessions', async ({
     await second.addCookies([
       { name: 'doorknob-session', value: 'forged', url: baseURL! }
     ]);
-    expect((await second.request.get(`${baseURL}/api/shares`)).status()).toBe(
-      401
-    );
+    expect(
+      await (await second.request.get(`${baseURL}/api/shares`)).json()
+    ).toEqual([]);
     expect(
       (
         await second.request.post(`${baseURL}/api/shares`, {
           data: { text: 'Fictional forged thought.' }
         })
       ).status()
-    ).toBe(401);
+    ).toBe(201);
   } finally {
     await second.close();
   }

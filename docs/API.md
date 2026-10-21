@@ -1,6 +1,6 @@
-# Private share API
+# Share API
 
-This is the HTTP contract for the Next.js BFF in `jft-app`. It is for the current browser's private shares. There are no public links, share tokens, login endpoints, or client-selected owners. See [architecture](ARCHITECTURE.md) for implementation boundaries and [the README](../README.md#getting-started) for server setup.
+This is the HTTP contract for the Next.js BFF in `jft-app`. It supports the current browser's private shares and UUID-link sharing. There are no login endpoints or client-selected owners. See [architecture](ARCHITECTURE.md) for implementation boundaries and [the README](../README.md#getting-started) for server setup.
 
 ## OpenAPI contract and libraries
 
@@ -28,9 +28,9 @@ No generated client or interactive documentation UI is required to consume the d
 
 ## Session and response conventions
 
-The server reads the `doorknob-session` cookie. If it is absent, a supported endpoint creates a random anonymous owner and issues a signed cookie with its response. A malformed, expired, or incorrectly signed cookie produces 401 before accessing shares; it is not silently replaced. Cookie-based clients must retain and resend the cookie. Browser code uses same-origin credentials; nonbrowser clients need a cookie jar.
+The server reads the `doorknob-session` cookie. If it is absent, malformed, expired, or incorrectly signed, a private create/list/detail endpoint creates a fresh random anonymous owner and issues a signed cookie with its response. The previous owner is never trusted or restored from invalid credentials; the new history is empty. This intentionally simple behavior is for the disposable in-memory prototype, with no recovery UI or endpoint. Cookie-based clients must retain and resend the cookie. Browser code uses same-origin credentials; nonbrowser clients need a cookie jar.
 
-The cookie is HttpOnly, host-only, SameSite=Lax, and scoped to `/`. It has an absolute 30-day lifetime, with Secure added in production. Successful reads do not refresh its expiry. When the browser drops an expired cookie, its next request starts a new owner; an expired credential explicitly sent by a client receives 401. Tabs sharing site cookies share an owner. Isolation requires separate cookie jars, such as a normal profile and a private profile; multiple private windows may share cookies with one another.
+The cookie is HttpOnly, host-only, SameSite=Lax, and scoped to `/`. It has an absolute 30-day lifetime, with Secure added in production. Successful reads do not refresh its expiry. When the browser drops an expired cookie, its next request starts a new owner; an expired credential explicitly sent by a client also starts a new owner. Tabs sharing site cookies share an owner. Isolation requires separate cookie jars, such as a normal profile and a private profile; multiple private windows may share cookies with one another.
 
 Signing prevents tampering; it does not encrypt the payload. The cookie contains the owner UUID and expiry and must be treated as a bearer credential. Do not log it, commit a cookie jar, or put it in an API body or URL. The `ownerId` field is omitted from share JSON; the UUID in the signed cookie is not a secret identifier on its own.
 
@@ -47,7 +47,21 @@ Responses carry `Cache-Control: private, no-store`. Share/error bodies use JSON;
 
 Messages are intended for display. Branch on `error.code` and the HTTP status, never by matching message text. The fetch client exposes these as `ShareApiError.code`, `.status`, and `.message` and does not retry writes. Non-JSON HTTP failures retain their status with a safe fallback message.
 
-401 includes `WWW-Authenticate: DoorknobSession realm="doorknob"`. This is an application-specific HTTP authentication scheme for this private BFF, not a registered interoperable login protocol. Credentials are still carried only in the signed cookie; the server does not accept an Authorization/Bearer header. The challenge advertises the required session mechanism without pretending the credential is an OAuth bearer token. OpenAPI models this transport as an `apiKey` security scheme in a cookie. Its anonymous alternative permits initial cookie issuance; it never makes an invalid supplied cookie acceptable.
+## Save-time sharing URL
+
+Create/list/detail responses include `shareUrl`, a relative URL such as `/s/{id}`. It is generated once when the record is constructed, before storage. Resolve it against the application origin for native sharing or copying. Reads return the original URL without renewal. There is no separate link-generation endpoint or extra sharing request. Treat URLs as bearer credentials and never log them.
+
+The server rejects public reads seven days after the stored `createdAt` timestamp. The URL has no query parameters; adding or changing an `expires` query parameter has no effect. Expiration has no configuration, response metadata field, or UI label. Public responses exclude `shareUrl` and all owner metadata.
+
+## Read a public share
+
+`GET /api/public/shares/{id}` requires the cryptographically random UUIDv4, **no session**. The UUID itself is the bearer credential; every saved share can be read by someone who knows its ID during its lifetime. Existing cookies are ignored, including invalid ones; this endpoint never issues or replaces them. The server validates the UUID before storage lookup, then checks the stored creation time before returning content. No client-provided timestamp controls lifetime. Malformed UUIDs, expired shares and nonexistent records return **404/SHARE_NOT_FOUND**. Repository failures return generic 500. No signature or separate sharing secret is used.
+
+Success is **200** with only `{ "reflection": { "id": "...", "date": "2025-04-23", "title": "...", "body": "..." }, "text": "A fictional thought." }`. It excludes owner ID, share creation metadata, kind and private history. Responses, including failures, carry `Cache-Control: private, no-store`, `X-Robots-Tag: noindex, nofollow` and `Referrer-Policy: no-referrer`. HEAD performs the same UUID and lifetime checks with no body. OPTIONS advertises `GET, HEAD, OPTIONS`; other methods return coded 405 with Allow. No CORS permission is granted.
+
+The recipient HTML page is `/s/{id}` with the same UUID and service boundary. Valid links show the original reading date/title/body and written thoughts. Unavailable links show a generic message (HTML 200); unexpected server failures use a separate retryable error boundary with sanitized diagnostics and an initial HTTP 500 response; this is a minimal reading page, not private-history navigation. Pages have dynamic private/no-store caching and noindex/no-referrer headers and metadata. No session is established. No content-specific metadata or external tracking is added.
+
+These are bearer links: recipients may forward, copy, or save content. There is no immediate revocation, token storage, link version counter, revoke endpoint, or delete endpoint. Future deletion of a share will invalidate its links by removing the record. Expiration does not remove records or recall received copies. A process restart loses all records. [Architecture](ARCHITECTURE.md#public-sharing-boundary) describes the trust boundary and tradeoffs.
 
 ## Create a share
 
@@ -70,6 +84,7 @@ Success is **201 Created** with a share and a relative `Location: /api/shares/{i
   "id": "95eff0e1-bca7-4fd1-83d2-42ba330aab22",
   "createdAt": "2026-10-18T12:00:00.000Z",
   "kind": "text",
+  "shareUrl": "/s/95eff0e1-bca7-4fd1-83d2-42ba330aab22",
   "text": "A fictional thought.\nOne small step.",
   "reflection": {
     "id": "acceptance-2025-04-23",
@@ -92,29 +107,28 @@ Success is **200 OK** with an array of this session's shares, newest creation ti
 
 `GET /api/shares/:id`
 
-Success is **200 OK** with the same share shape as creation. The ID selects a record but grants no access by itself. IDs with no corresponding record (including non-UUID strings) and IDs belonging to a different owner all return **404 Not Found** with the same error message. Session validation runs first, so invalid credentials return 401 even for an unknown ID.
+Success is **200 OK** with the same share shape as creation. This private endpoint requires the owner session. The same UUID also grants public read access through `/s/{id}` for seven days, so it must be treated as a credential. IDs with no corresponding record (including non-UUID strings) and IDs belonging to a different owner all return **404 Not Found** with the same error message. An invalid cookie starts a fresh owner, which cannot read a previous owner's share and therefore receives 404.
 
 ## Status and stable error codes
 
-| Status | Code                   | Meaning                                                                                 |
-| ------ | ---------------------- | --------------------------------------------------------------------------------------- |
-| 200    | —                      | List/detail succeeded; only a loaded empty array means empty history                    |
-| 201    | —                      | Confirmed creation; clear the saved draft and show confirmation                         |
-| 400    | INVALID_JSON           | The JSON body cannot be parsed                                                          |
-| 400    | INVALID_SHARE          | Text is missing, blank, too long, or extra fields were supplied                         |
-| 401    | INVALID_SESSION        | Supplied cookie is malformed, expired, or incorrectly signed; includes WWW-Authenticate |
-| 403    | CROSS_ORIGIN_REQUEST   | POST supplied a foreign Origin                                                          |
-| 404    | SHARE_NOT_FOUND        | Detail record is absent or inaccessible to this owner                                   |
-| 405    | METHOD_NOT_ALLOWED     | This resource does not implement that App Router HTTP method; includes Allow            |
-| 413    | PAYLOAD_TOO_LARGE      | Raw request body exceeds 65,536 bytes                                                   |
-| 415    | UNSUPPORTED_MEDIA_TYPE | POST content type is missing, invalid, or not application/json                          |
-| 500    | INTERNAL_ERROR         | Configuration, repository, or other internal operation failed; details remain private   |
+| Status | Code                   | Meaning                                                                               |
+| ------ | ---------------------- | ------------------------------------------------------------------------------------- |
+| 200    | —                      | List/detail succeeded; only a loaded empty array means empty history                  |
+| 201    | —                      | Confirmed creation; clear the saved draft and show confirmation                       |
+| 400    | INVALID_JSON           | The JSON body cannot be parsed                                                        |
+| 400    | INVALID_SHARE          | Text is missing, blank, too long, or extra fields were supplied                       |
+| 403    | CROSS_ORIGIN_REQUEST   | POST supplied a foreign Origin                                                        |
+| 404    | SHARE_NOT_FOUND        | Detail record is absent or inaccessible to this owner                                 |
+| 405    | METHOD_NOT_ALLOWED     | This resource does not implement that App Router HTTP method; includes Allow          |
+| 413    | PAYLOAD_TOO_LARGE      | Raw request body exceeds 65,536 bytes                                                 |
+| 415    | UNSUPPORTED_MEDIA_TYPE | POST content type is missing, invalid, or not application/json                        |
+| 500    | INTERNAL_ERROR         | Configuration, repository, or other internal operation failed; details remain private |
 
-On failed saves, retain the draft. Correct 400/413 input, use JSON for 415, and check the same-origin/proxy setup for 403. For 401, explain access loss before clearing cookies; doing so creates another owner, not account recovery. 500 is generic: resolve the server/connection problem and consider the ambiguous-write caveat below before retrying.
+On failed saves, retain the draft. Correct 400/413 input, use JSON for 415, and check the same-origin/proxy setup for 403. Private reads with invalid cookies start a fresh owner, not account recovery. 500 is generic: resolve the server/connection problem and consider the ambiguous-write caveat below before retrying.
 
-401 and 500 can occur on private share operations; OPTIONS and the specification do not require a session. Media types are parsed with the `content-type` library: valid case-insensitive spellings such as `Application/JSON; Charset="UTF-8"` are accepted; syntactically invalid headers and other JSON subtypes are not accepted. A valid header is normalized before the OpenAPI JSON validator runs. POST also compares a supplied Origin to the browser-facing Host and request protocol. A missing Origin is allowed for nonbrowser clients. There is no cross-origin API/CORS support. Deploy behind HTTPS and a proxy that preserves or correctly supplies the original Host and protocol; do not rewrite these to an unrelated internal hostname.
+500 can occur on private share operations; OPTIONS and the specification do not require a session. Media types are parsed with the `content-type` library: valid case-insensitive spellings such as `Application/JSON; Charset="UTF-8"` are accepted; syntactically invalid headers and other JSON subtypes are not accepted. A valid header is normalized before the OpenAPI JSON validator runs. POST also compares a supplied Origin to the browser-facing Host and request protocol. A missing Origin is allowed for nonbrowser clients. There is no cross-origin API/CORS support. Deploy behind HTTPS and a proxy that preserves or correctly supplies the original Host and protocol; do not rewrite these to an unrelated internal hostname.
 
-A new session cookie can accompany a controlled POST validation error because the middleware establishes a session first. Foreign-origin rejections, invalid credentials, and internal 500 failures do not issue a cookie. [Session middleware](../src/shares/server/middleware.ts) and [HTTP errors](../src/shares/server/http.ts) own this behavior. POST origin validation runs first: a foreign Origin receives 403 without reading, creating, or replacing a session, even if a supplied cookie is invalid. For accepted origins, session validation precedes media-type, size, JSON, and schema checks; a forged cookie therefore receives 401 even with an oversized body.
+A new session cookie can accompany a controlled POST validation error because the middleware establishes a session first. Foreign-origin rejections and internal 500 failures do not issue a cookie. [Session middleware](../src/shares/server/middleware.ts) and [HTTP errors](../src/shares/server/http.ts) own this behavior. POST origin validation runs first: a foreign Origin receives 403 without reading, creating, or replacing a session, even if a supplied cookie is invalid. For accepted origins, verified or fresh anonymous ownership is established before media-type, size, JSON, and schema checks. Invalid cookies never supply ownership.
 
 ## HEAD, OPTIONS, and unsupported methods
 
@@ -124,7 +138,7 @@ A new session cookie can accompany a controlled POST validation error because th
 | /api/shares/{id}  | GET, HEAD, OPTIONS       |
 | /api/openapi.json | GET, HEAD, OPTIONS       |
 
-Hono implements HEAD by running the GET checks and removing the body. A private detail can therefore return 200, 404, or 401 with an empty body and the corresponding GET headers (including the 401 challenge). Initial HEAD requests may issue a cookie, just like GET.
+Hono implements HEAD by running the GET checks and removing the body. A private detail can therefore return 200 or 404 with an empty body and the corresponding GET headers (or generic 500 on server failure). Initial HEAD requests may issue a cookie, just like GET.
 
 OPTIONS returns 204, no body, and the Allow header. It does not read/create sessions, even if a supplied cookie is invalid, and it grants no CORS permission. App Router methods not implemented by a resource (PUT/PATCH/DELETE, plus POST on a detail/spec resource) return the coded 405 envelope, private/no-store, and Allow without issuing a cookie. Methods Next.js rejects before dispatch, malformed transport requests, and framework redirects remain outside the custom JSON envelope.
 

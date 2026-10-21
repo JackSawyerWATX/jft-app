@@ -109,7 +109,7 @@ test('returns 404 for nonexistent and other owners shares; isolates anonymous se
   assert.equal((await detail(created.id)).status, 404);
 });
 
-test('rejects forged, unsigned, empty, malformed and expired session credentials', async () => {
+test('replaces unusable session cookies with isolated fresh owners', async () => {
   const valid = await session();
   const credential = decodeURIComponent(valid.slice(valid.indexOf('=') + 1));
   for (const forged of [
@@ -121,20 +121,23 @@ test('rejects forged, unsigned, empty, malformed and expired session credentials
     credential + '.extra'
   ]) {
     const cookie = `doorknob-session=${encodeURIComponent(forged)}`;
-    assert.equal((await GET(request('GET', cookie))).status, 401);
+    const fresh = await GET(request('GET', cookie));
+    assert.equal(fresh.status, 200);
+    assert.ok(fresh.headers.get('set-cookie'));
+    assert.deepEqual(await fresh.json(), []);
     assert.equal(
       (await POST(request('POST', cookie, { text: 'Fictional thought.' })))
         .status,
-      401
+      201
     );
-    assert.equal((await detail(randomUUID(), cookie)).status, 401);
+    assert.equal((await detail(randomUUID(), cookie)).status, 404);
   }
 });
 
-test('rejects a supplied cookie that the library cannot parse', async () => {
+test('replaces a supplied cookie that the library cannot parse', async () => {
   assert.equal(
     (await GET(request('GET', 'doorknob-session=invalid"value'))).status,
-    401
+    200
   );
 });
 
@@ -163,7 +166,7 @@ test('repository enforces ownership and returns independent snapshots', async ()
   assert.deepEqual(await shareRepository.listByOwner(other), []);
 });
 
-test('production cookies are Secure and an authentic expired signature is rejected', async (context) => {
+test('production cookies are Secure and an expired cookie starts a fresh owner', async (context) => {
   const secret = 'fictional-unit-test-secret-at-least-32-bytes';
   context.mock.property(process, 'env', {
     ...process.env,
@@ -182,7 +185,7 @@ test('production cookies are Secure and an authentic expired signature is reject
     }),
     secret
   );
-  assert.equal((await GET(request('GET', expired))).status, 401);
+  assert.equal((await GET(request('GET', expired))).status, 200);
   delete process.env.SESSION_SECRET;
   assert.equal((await GET(request())).status, 500);
   process.env.SESSION_SECRET = 'too-short';
@@ -230,7 +233,10 @@ test('validates signed JSON payloads before trusting session ownership', async (
     JSON.stringify({ ...payload, extra: true })
   ]) {
     const cookie = await serializeSigned('doorknob-session', value, secret);
-    assert.equal((await GET(request('GET', cookie))).status, 401);
+    const fresh = await GET(request('GET', cookie));
+    assert.equal(fresh.status, 200);
+    assert.ok(fresh.headers.get('set-cookie'));
+    assert.deepEqual(await fresh.json(), []);
   }
 });
 

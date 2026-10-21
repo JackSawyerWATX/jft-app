@@ -5,8 +5,7 @@ export function AppFooter() {
       <div className="divider" />
       <p className="eyebrow">One day. One thought. One step.</p>
       <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
-        Private to this browser session. Clearing cookies loses access to saved
-        shares.
+        Only shared when you send a link.
       </p>
     </footer>
   );

@@ -10,12 +10,7 @@ type ShareFormProps = {
   onSave: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-/**
- * Controlled draft form; the parent owns text, errors, and asynchronous persistence.
- * disabled blocks submission; saving also makes the textarea read-only. Empty trimmed
- * input disables the button, but server validation remains authoritative. onSave owns
- * preventDefault and failure handling. Help/error IDs describe the field accessibly.
- */
+/** The parent owns the draft and clears it only after a confirmed save. */
 export function ShareForm({
   text,
   disabled,

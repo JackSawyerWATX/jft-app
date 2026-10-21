@@ -1,4 +1,3 @@
-/** Decorative lock for the private-save explanation; inherits the text color. */
 export function LockIcon() {
   return (
     <svg

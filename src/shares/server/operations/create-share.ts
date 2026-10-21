@@ -14,7 +14,6 @@ import { createShareSchema, MAX_SHARE_TEXT_LENGTH } from '../../model';
 import { MAX_SHARE_REQUEST_BYTES } from '../http';
 import { anonymousSession, sameOrigin, jsonBody } from '../middleware';
 
-/** Creation contract; runtime input validation and OpenAPI generation use the same Zod object. */
 export const createShareRoute = createRoute({
   middleware: [sameOrigin, anonymousSession, jsonBody] as const,
   method: 'post',
@@ -61,12 +60,7 @@ export const createShareRoute = createRoute({
   }
 });
 
-/**
- * Stores validated text for the verified owner and returns the private Location.
- * @param c - Request context with verified ownership and validated inputs.
- * @returns The documented JSON success or controlled failure response.
- * @throws On repository/serialization failure; the shared error handler returns 500.
- */
+/** Ownership comes from the session; client input supplies only text. */
 export const createShare: RouteHandler<
   typeof createShareRoute,
   SessionEnvironment

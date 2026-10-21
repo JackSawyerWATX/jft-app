@@ -8,7 +8,7 @@ import { error, MAX_SHARE_REQUEST_BYTES } from './http';
 /** Request-local owner established by the protected operation's session middleware. */
 export type SessionEnvironment = { Variables: { ownerId: string } };
 
-/** Verifies ownership after the origin check and before body validation; only non-500 responses issue new cookies. */
+/** Resolves verified or fresh anonymous ownership after origin checks; only non-500 responses issue new cookies. */
 export const anonymousSession: MiddlewareHandler<SessionEnvironment> = async (
   c,
   next

@@ -3,9 +3,8 @@ import { createRoute, type RouteConfig, z } from '@hono/zod-openapi';
 import type { HeadersObject } from 'openapi3-ts/oas31';
 import type { ApiErrorCode } from '../errors';
 import { shareSchema } from '../model';
-import { apiFailures, SESSION_CHALLENGE } from './http';
+import { apiFailures } from './http';
 
-/** Owner-free share response schema reused by resource contracts. */
 export const share = shareSchema.openapi('Share', {
   additionalProperties: false
 });
@@ -20,22 +19,17 @@ const cookieHeader = {
     'Issued only for a new anonymous session. HttpOnly, SameSite=Lax, path /, 30-day Max-Age; Secure in production. No rolling renewal.',
   schema: { type: 'string' as const }
 };
-/** Cache/cookie response headers shared by private operations. */
+
 export const privateHeaders = {
   'Cache-Control': privateHeader,
   'Set-Cookie': cookieHeader
 };
-/** Missing credentials bootstrap a session; invalid supplied credentials still fail. */
+
 export const sessionSecurity: Record<string, string[]>[] = [
   { AnonymousSession: [] },
   {}
 ];
-/**
- * Builds an error response contract restricted to the supplied codes.
- * @param codes - Codes allowed for this HTTP status.
- * @param extraHeaders - Additional protocol response headers.
- * @returns The JSON error schema and documented headers.
- */
+/** Restrict each HTTP error response to its allowed codes. */
 export function failed(
   codes: [ApiErrorCode, ...ApiErrorCode[]],
   extraHeaders: HeadersObject = {}
@@ -54,23 +48,9 @@ export function failed(
     }
   };
 }
-/** Session and internal failures common to private operations. */
-export const commonFailures = {
-  401: failed(['INVALID_SESSION'], {
-    'WWW-Authenticate': {
-      required: true,
-      schema: { type: 'string' as const, enum: [SESSION_CHALLENGE] },
-      description:
-        'Private DoorknobSession scheme; send credentials via the session cookie, not an Authorization header.'
-    }
-  }),
-  500: failed(['INTERNAL_ERROR'])
-};
-/**
- * Derives bodyless HEAD documentation; Hono executes the corresponding GET handler.
- * @param route - GET operation whose authorization and headers HEAD inherits.
- * @returns Contract metadata with no runtime middleware or response body schemas.
- */
+
+export const commonFailures = { 500: failed(['INTERNAL_ERROR']) };
+/** HEAD inherits GET checks and headers; document it without response bodies. */
 export function headRoute(route: RouteConfig) {
   const { middleware: _middleware, ...contract } = route;
   void _middleware;
@@ -90,13 +70,6 @@ export function headRoute(route: RouteConfig) {
   });
 }
 
-/**
- * Declares unauthenticated method discovery for a resource.
- * @param path - OpenAPI resource path.
- * @param allow - Methods advertised by OPTIONS and 405.
- * @param operationId - Unique specification operation name.
- * @returns Bodyless OPTIONS contract; the resource binds its handler.
- */
 export function optionsRoute(path: string, allow: string, operationId: string) {
   return createRoute({
     method: 'options',
@@ -119,22 +92,21 @@ export function optionsRoute(path: string, allow: string, operationId: string) {
   });
 }
 
-/** Configuration for the generated OpenAPI 3.1 document; contains no live share/session data. */
 export const openApiConfiguration = {
   openapi: '3.1.0' as const,
   info: {
-    title: 'Doorknob private share BFF',
-    version: '0.2.0',
+    title: 'Doorknob share BFF',
+    version: '0.3.0',
     contact: { url: 'https://github.com/drewmalone/jft-app/issues' },
     description:
-      'Local-development process-memory persistence. Restarts erase shares; serverless instances/replicas do not share data. No public sharing links or login.'
+      'Local-development process-memory persistence. Restarts erase shares; serverless instances/replicas do not share data. Owner-scoped private shares and expiring UUID public reading links. No login or immediate link revocation.'
   },
   servers: [{ url: '/', description: 'Same origin as the application.' }],
   tags: [
     {
       name: 'Shares',
       description:
-        'Private resources scoped to a signed anonymous session cookie.'
+        'Private resources scoped to a signed anonymous session cookie, and public reads authorized by expiring bearer UUIDs.'
     }
   ]
 };

@@ -9,11 +9,6 @@ type ShareHistoryProps = {
   onOpen: (share: Share) => void;
 };
 
-/**
- * Presents loading, history, or the empty invitation without making requests.
- * The controller displays failed-state messages/retry. onOpen receives the selected
- * list record so the controller can fetch its detail; selection does not authorize it.
- */
 export function ShareHistory({ history, onWrite, onOpen }: ShareHistoryProps) {
   if (history.status === 'loading')
     return <p role="status">Loading your shares…</p>;

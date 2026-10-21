@@ -6,16 +6,16 @@ import { headRoute, optionsRoute } from './openapi';
 import { listSharesRoute } from './operations/list-shares';
 import { readShareRoute } from './operations/read-share';
 
-/** Supported collection methods, shared by discovery and rejected-method responses. */
+import { readPublicShareRoute } from './operations/read-public-share';
+
 export const collectionAllow = 'GET, HEAD, POST, OPTIONS';
-/** Supported methods for a private share. */
+
 export const detailAllow = 'GET, HEAD, OPTIONS';
+const publicAllow = 'GET, HEAD, OPTIONS';
 
 /**
- * Adds resource-level discovery and method rejection after operation registration.
- * HEAD execution is supplied by Hono; only its documentation is registered here.
- * @param app - BFF with collection/detail operations already registered.
- * @returns Nothing; mutates the app and its OpenAPI registry.
+ * Register after operations so the method-rejection handlers do not mask them.
+ * Hono executes HEAD through GET; only HEAD documentation is added here.
  */
 export function registerResourceMethods(app: OpenAPIHono<SessionEnvironment>) {
   app.openapi(optionsRoute('/shares', collectionAllow, 'sharesOptions'), (c) =>
@@ -30,6 +30,17 @@ export function registerResourceMethods(app: OpenAPIHono<SessionEnvironment>) {
   );
   app.openAPIRegistry.registerPath(headRoute(listSharesRoute));
   app.openAPIRegistry.registerPath(headRoute(readShareRoute));
+  app.openapi(
+    createRoute({
+      ...optionsRoute('/public/shares/{id}', publicAllow, 'publicShareOptions'),
+      request: { params: readPublicShareRoute.request.params }
+    }),
+    (c) => c.body(null, 204, { Allow: publicAllow })
+  );
+  app.all('/public/shares/:id', () =>
+    error('METHOD_NOT_ALLOWED', { Allow: publicAllow })
+  );
+  app.openAPIRegistry.registerPath(headRoute(readPublicShareRoute));
   app.all('/shares', () =>
     error('METHOD_NOT_ALLOWED', { Allow: collectionAllow })
   );

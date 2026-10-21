@@ -1,6 +1,6 @@
 # Data glossary
 
-Use these terms consistently across `jft-app` and `jft-harness`. App-specific session/persistence terms below describe Doorknob v0.2; they do not introduce a shared schema, integration, or harness storage policy.
+Use these terms consistently across `jft-app` and `jft-harness`. App-specific session/persistence terms below describe Doorknob v0.3; they do not introduce a shared schema, integration, or harness storage policy.
 
 | Term                 | Meaning                                                                                                       | Location and lifecycle                                                                                                                                         |
 | -------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -15,22 +15,27 @@ Use these terms consistently across `jft-app` and `jft-harness`. App-specific se
 | Fictional fixture    | Invented test/example data, never a real person's recovery history                                            | Both: committed test/example files; normal Git history retains them                                                                                            |
 | Trace                | A harness execution record that may contain complete input text, questions, model responses, and tool results | Harness: local generated files; retention is manual, and traces must not be committed                                                                          |
 
+## Public sharing terms
+
+- **Sharing link**: a URL containing only the server-generated, cryptographically random UUIDv4, `/s/{id}`. The UUID is a bearer credential: anyone who learns it can read that share's original reading and text for seven days from its stored creation time. It does not authorize owner history. The server prepares one URL while saving and keeps it in the same in-memory share record; there are no separate signatures, sharing secrets, token records, or recipient tracking.
+- **Expiration**: rejects subsequent reads; it neither deletes the share nor erases a recipient's copy. Fixed at seven days from saving. No immediate individual-link revocation exists.
+
 ## App data lifecycle
 
 1. Writing changes React state only. The app sends the draft to the same-origin BFF when the person chooses **Save privately**.
 2. The server validates the input and signed session, attaches metadata/current reading, and stores an owner-associated record in process memory. A lost response can make the client uncertain whether a write occurred; see [failed-write semantics](API.md#retention-and-failed-write-semantics).
-3. The server returns a share without an `ownerId` field. History/detail requests send the cookie, check ownership, and return that owner's records to browser memory for display. The app does not send recovery text to another person, the harness, or a model provider.
+3. The server returns a share without an `ownerId` field. History/detail requests send the cookie, check ownership, and return that owner's records to browser memory for display. Saving does not send the share to another person. Save-time UUID links allow anyone holding one to fetch only that reading snapshot and text; no harness or model provider is involved.
 4. Access loss and deletion are different events:
 
 | Event                                      | Effect on access                                                                          | Effect on data                                                                |
 | ------------------------------------------ | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Refresh or tab close                       | A valid cookie still permits fetching saved shares                                        | Unsaved draft/browser React state disappears; server records remain           |
 | Clear site cookies                         | A new request gets a different owner; prior shares become inaccessible                    | Existing server records remain in the running Map                             |
-| Cookie expiry or signing-key change        | Old credentials are rejected; no account recovery exists                                  | Records remain in memory; there is no automatic expiry/deletion job           |
+| Cookie expiry or signing-key change        | A fresh empty owner is issued; no account recovery exists                                 | Records remain in memory; there is no automatic expiry/deletion job           |
 | Restart/replace the Node process           | A valid configured-key cookie can still authenticate, but its old records no longer exist | All shares in that process are lost; an ephemeral development key also resets |
 | Route a request to another process/replica | Only records in that process can be found                                                 | Maps are separate; no synchronization or durable backing store exists         |
 
-There is no per-share delete endpoint, backup, disk storage, encryption at rest, or migration/import of v0.1 test data. The Map retains records until process exit and is unsuitable for reliable serverless/multi-instance persistence. Clearing cookies is not a deletion mechanism. No public sharing links or signed share tokens exist in this milestone.
+There is no per-share delete endpoint, backup, disk storage, encryption at rest, or migration/import of v0.1 test data. The Map retains records until process exit and is unsuitable for reliable serverless/multi-instance persistence. Clearing cookies is not a deletion mechanism. UUID public links grant bearer access until expiration or loss of the underlying record. They are stored only in the share record and are not individually revocable; clearing owner cookies does not invalidate them. Recipients can forward links or retain copies; expiry cannot recall content. Future share deletion will invalidate all links, but no delete endpoint exists in v0.3.
 
 ## Documentation rules
 
