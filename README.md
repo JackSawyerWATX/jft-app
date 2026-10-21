@@ -108,4 +108,36 @@ See [the private API reference and curl example](docs/API.md), [architecture](do
 
 ## Installation troubleshooting
 
-This project uses public npm packages and does not require npm login. For E401 on a machine configured for a private company registry, try `npm ci --registry=https://registry.npmjs.org/`. Fix installation errors before starting the app. Do not commit registry credentials or change shared company authentication.
+This project uses public npm packages and does not require npm login. If `npm ci` returns E401 on a machine configured for a private company registry, try:
+
+```bash
+npm ci --registry=https://registry.npmjs.org/
+```
+
+A failed installation leaves `next` unavailable, so fix the install before running `npm run dev`. Do not commit registry credentials or change shared company authentication to run this app.
+
+### npm warnings
+
+If npm reports unknown user config `always-auth`, remove only the obsolete
+registry-scoped setting from your user configuration:
+
+```bash
+npm config delete '//us-npm.pkg.dev/gcp-hopper-cicd/npm-main/:always-auth' --location=user
+```
+
+Keep registry URLs and authentication tokens intact. This setting lives outside
+this repository and cannot be fixed by reinstalling project dependencies.
+
+ESLint stays on version 9 because the React, import, and accessibility plugins in
+Next.js's lint configuration do not support ESLint 10 yet. npm may report that
+ESLint 9 is deprecated; moving to 10 currently produces peer dependency conflicts.
+
+The `allowScripts` policy permits native tool setup for esbuild, fsevents (macOS),
+and unrs-resolver, and denies Scarf's analytics postinstall. npm versions supporting
+this policy can install without asking to approve these packages individually.
+
+As of October 18, 2026, npm audit reports six high-severity findings from one
+unpatched `braces` dependency chain in the development ESLint and Spectral tooling. The latest
+published braces version is 3.0.3, which remains affected. Do not use
+`npm audit fix --force`: its proposed Next.js lint configuration downgrade is not
+a compatible fix for this project. Revisit when the upstream tooling is patched.
