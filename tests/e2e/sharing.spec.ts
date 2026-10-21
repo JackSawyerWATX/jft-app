@@ -11,7 +11,7 @@ async function save(page: Page) {
   );
   await page.getByRole('button', { name: 'Save privately' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
   return (await response).json();
 }
@@ -47,9 +47,12 @@ test('share icon uses the saved URL directly for native sharing and session-free
   );
   expect(linkRequests).toBe(0);
   await expect(page.getByLabel('Sharing link')).toHaveCount(0);
+  await expect(page.getByText(/expires|revoked/i)).toHaveCount(0);
   await expect(
-    page.getByText(/expires|anyone with this link|revoked/i)
-  ).toHaveCount(0);
+    page.getByText('Anyone with this link can view your share.', {
+      exact: true
+    })
+  ).toBeVisible();
   const recipient = await browser.newContext();
   try {
     const reader = await recipient.newPage();
@@ -209,15 +212,14 @@ test('native cancellation stays silent and native failures fall back to copying'
   await expect(page.getByRole('status')).toHaveText('Link copied.');
 });
 
-test('long thoughts expand locally on owner and recipient pages, and recipients can start writing', async ({
+test('long thoughts appear in full on owner and recipient pages, and recipients can start writing', async ({
   page,
   browser,
   baseURL
 }) => {
   const text =
     'A fictional reflection about making space for another person. '.repeat(8) +
-    'The complete context is here.';
-  const preview = /^A fictional reflection.*\.\.\.$/;
+    'The complete context is here. 👨‍👩‍👧‍👦';
   await page.goto('/');
   await page.getByRole('textbox').fill(text);
   const response = page.waitForResponse(
@@ -226,59 +228,44 @@ test('long thoughts expand locally on owner and recipient pages, and recipients 
   await page.getByRole('button', { name: 'Save privately' }).click();
   const saved = await (await response).json();
   await expect(
-    page.getByRole('button', {
-      name: 'Share with fellow alcoholic',
-      exact: true
-    })
+    page.locator('article').getByText(text, { exact: true })
   ).toBeVisible();
-  let calls = 0;
-  page.on('request', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/')) calls++;
-  });
-  await expect(page.getByText(preview)).toBeVisible();
-  await expect(page.getByText(preview)).not.toContainText(
-    'The complete context is here.'
-  );
-  const ownerExpand = page.getByRole('button', {
-    name: 'Read more',
-    exact: true
-  });
-  await expect(ownerExpand).toHaveAttribute('aria-expanded', 'false');
-  await ownerExpand.click();
-  await expect(page.getByText(text, { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Show less' })).toHaveAttribute(
-    'aria-expanded',
-    'true'
-  );
-  await page.getByRole('button', { name: 'Show less' }).click();
-  await expect(page.getByText(preview)).toBeVisible();
-  expect(calls).toBe(0);
+  await expect(
+    page.getByRole('button', { name: /Read more|Show less/ })
+  ).toHaveCount(0);
   await page
     .getByRole('main')
     .getByRole('button', { name: 'Past shares', exact: true })
     .click();
+  await expect(page.getByRole('listitem')).toContainText(text);
   await page.getByRole('listitem').getByRole('button').click();
-  await expect(page.getByText(preview)).toBeVisible();
+  await expect(
+    page.locator('article').getByText(text, { exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText('A moment you made space for yourself.')
+  ).toHaveCount(0);
   const recipient = await browser.newContext();
   try {
     const reader = await recipient.newPage();
     await reader.goto(new URL(saved.shareUrl, baseURL).href);
-    const thoughts = reader.getByRole('region', { name: 'Shared thoughts' });
-    await expect(thoughts.getByText(preview)).toBeVisible();
-    await thoughts.getByRole('button', { name: 'Read more' }).click();
-    await expect(thoughts.getByText(text, { exact: true })).toBeVisible();
-    await thoughts.getByRole('button', { name: 'Show less' }).click();
-    await expect(thoughts.getByText(preview)).toBeVisible();
+    await expect(
+      reader
+        .getByRole('region', { name: 'Shared thoughts' })
+        .getByText(text, { exact: true })
+    ).toBeVisible();
+    await expect(
+      reader.getByRole('button', { name: /Read more|Show less/ })
+    ).toHaveCount(0);
     expect(await recipient.cookies()).toEqual([]);
     const write = reader.getByRole('link', {
-      name: 'Write your share',
+      name: 'Write your own share',
       exact: true
     });
     await expect(write).toHaveAttribute('href', '/');
     await write.click();
-    await expect(reader).toHaveURL(new URL('/', baseURL).href);
     await expect(
-      reader.getByRole('heading', { name: 'Write your share', exact: true })
+      reader.getByRole('heading', { name: 'Your thoughts', exact: true })
     ).toBeVisible();
     await reader
       .getByRole('textbox')
@@ -292,18 +279,4 @@ test('long thoughts expand locally on owner and recipient pages, and recipients 
   } finally {
     await recipient.close();
   }
-});
-
-test('thought previews keep a family emoji intact at the cutoff', async ({
-  page
-}) => {
-  const text = 'x'.repeat(239) + '👨‍👩‍👧‍👦 A fictional complete thought.';
-  await page.goto('/');
-  await page.getByRole('textbox').fill(text);
-  await page.getByRole('button', { name: 'Save privately' }).click();
-  await expect(page.getByText(/👨‍👩‍👧‍👦\.\.\.$/)).toBeVisible();
-  await page.getByRole('button', { name: 'Read more' }).click();
-  await expect(page.getByText(text, { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Show less' }).click();
-  await expect(page.getByText(/👨‍👩‍👧‍👦\.\.\.$/)).toBeVisible();
 });

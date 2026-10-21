@@ -40,8 +40,9 @@ export default async function SharedReflection({
       <main className="mx-auto max-w-xl px-6 py-12 sm:px-8">
         {share ? (
           <>
-            <p className="eyebrow text-center">
-              Shared with you · {readingDateLabel(share.reflection.date)}
+            <p className="eyebrow text-center">Shared with you</p>
+            <p className="mt-2 text-center text-xs leading-relaxed text-[var(--muted)]">
+              Sample reading · {readingDateLabel(share.reflection.date)}
             </p>
             <h1 className="mt-6 text-center font-serif text-4xl leading-snug">
               {share.reflection.title}
@@ -54,7 +55,7 @@ export default async function SharedReflection({
               aria-label="Shared thoughts"
               className="share-card mt-10 rounded-xl border border-[var(--line)] p-6 sm:p-8"
             >
-              <h2 className="eyebrow">Their thoughts</h2>
+              <h2 className="font-serif text-2xl">Their thoughts</h2>
               <ThoughtsText key={shareId} text={share.text} />
             </section>
           </>
@@ -66,8 +67,13 @@ export default async function SharedReflection({
             </p>
           </>
         )}
-        <Link href="/" prefetch={false} className="primary mt-7 w-full">
-          Write your share
+        {share && (
+          <p className="mt-7 text-center font-serif text-xl">
+            What stood out to you?
+          </p>
+        )}
+        <Link href="/" prefetch={false} className="primary mt-3 w-full">
+          Write your own share
         </Link>
       </main>
     </div>

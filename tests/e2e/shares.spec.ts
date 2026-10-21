@@ -14,7 +14,7 @@ test('saves, persists, and opens shares in newest-first order', async ({
     .fill('A fictional first thought.\nOne small step.');
   await save.click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeFocused();
   await expect(page.locator('article')).toContainText('One small step.');
   await page.reload();
@@ -80,13 +80,13 @@ test('preserves a failed draft and saves it exactly once on retry', async ({
     'could not be saved'
   );
   await expect(
-    page.getByRole('heading', { name: 'Write your share' })
+    page.getByRole('heading', { name: 'Your thoughts' })
   ).toBeVisible();
 
   await page.unroute('**/api/shares');
   await page.getByRole('button', { name: 'Save privately' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeFocused();
   await expect(page.locator('article')).toContainText(
     'A fictional draft to keep.'
@@ -191,11 +191,11 @@ test('prevents duplicate submissions and waits for server confirmation', async (
     form.requestSubmit();
   });
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toHaveCount(0);
   release();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
   expect(writes).toBe(1);
   await page
@@ -337,7 +337,7 @@ test('background history does not block saving or overwrite fresh history', asyn
   ).toBeEnabled();
   await page.getByRole('button', { name: 'Save privately' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
   await page
     .getByRole('main')
@@ -416,7 +416,7 @@ test('failed bootstrap blocks saves through retry and navigation until the sessi
   await expect(save).toBeEnabled();
   await save.click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
   expect(writes).toBe(1);
   await page

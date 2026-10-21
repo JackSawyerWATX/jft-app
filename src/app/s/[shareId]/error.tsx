@@ -15,7 +15,7 @@ export default function SharedReflectionError({
         Try again
       </button>
       <Link href="/" prefetch={false} className="primary mt-3 w-full">
-        Write your share
+        Write your own share
       </Link>
     </main>
   );

@@ -18,7 +18,8 @@ body {
 button {
   cursor: pointer;
 }
-button:focus-visible {
+button:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 5px;
 }
@@ -111,7 +112,7 @@ button:disabled {
 }
 
 .share-textarea {
-  min-height: 16rem;
+  min-height: 12rem;
   width: 100%;
   resize: vertical;
   border: 1px solid var(--line);
@@ -132,4 +133,10 @@ button:disabled {
 .share-textarea:focus {
   border-color: var(--navy);
   box-shadow: 0 0 0 1px var(--navy);
+}
+
+@media (min-width: 640px) {
+  .share-textarea {
+    min-height: 16rem;
+  }
 }

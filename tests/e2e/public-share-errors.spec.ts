@@ -63,7 +63,7 @@ test('server failures use a retryable error page and sanitized diagnostics', asy
     ).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
     await expect(
-      page.getByRole('link', { name: 'Write your share' })
+      page.getByRole('link', { name: 'Write your own share' })
     ).toHaveAttribute('href', '/');
     expect(await page.context().cookies()).toEqual([]);
     await expect

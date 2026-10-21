@@ -30,7 +30,7 @@ test('a stale prototype cookie automatically starts an empty session and allows 
   expect(cookie?.value).not.toBe('fictional-stale-cookie');
   await page.getByRole('button', { name: 'Save privately' }).click();
   await expect(
-    page.getByRole('heading', { name: 'Your share has been saved.' })
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
   await page
     .getByRole('main')

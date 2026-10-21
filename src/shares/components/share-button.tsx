@@ -57,7 +57,7 @@ export function ShareButton({ url }: { url: string }) {
         title="Share with fellow alcoholic"
         disabled={pending}
         onClick={() => void share()}
-        className="secondary w-full"
+        className="primary w-full"
       >
         <svg
           className="shrink-0"
@@ -76,6 +76,9 @@ export function ShareButton({ url }: { url: string }) {
         </svg>
         <span>Share with fellow alcoholic</span>
       </button>
+      <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
+        Anyone with this link can view your share.
+      </p>
       {status && (
         <p role="status" className="mt-2 text-sm">
           {status}
