@@ -20,7 +20,7 @@
     "@hono/zod-openapi": "^1.6.3",
     "content-type": "^3.1.1",
     "hono": "^4.13.13",
-    "next": "^16.4.1",
+    "next": "^16.4.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "server-only": "0.0.1",
