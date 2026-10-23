@@ -1,4 +1,4 @@
-import { reflection } from '../reflection-fixture';
+import { reflection } from './reflection-fixture';
 import { readingDateLabel } from '../dates';
 
 export function ReflectionReading() {

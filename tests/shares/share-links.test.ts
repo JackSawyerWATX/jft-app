@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { readPublicShare } from '../../src/shares/server/public-shares';
 import { InMemoryShareRepository } from '../../src/shares/server/repository';
 import { dispatch } from '../../src/shares/server/app';
-import { reflection } from '../../src/shares/reflection-fixture';
+import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
 const now = 1_800_000_000;
 function request(

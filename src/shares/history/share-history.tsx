@@ -1,7 +1,7 @@
 import type { Share } from '../model';
 import { ShareHistoryItem } from './share-history-item';
 
-import type { ShareHistoryState } from '../use-share-history';
+import type { ShareHistoryState } from './use-share-history';
 
 type ShareHistoryProps = {
   history: ShareHistoryState;

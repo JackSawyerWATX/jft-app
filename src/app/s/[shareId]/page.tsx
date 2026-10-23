@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ThoughtsText } from '../../../shares/components/thoughts-text';
+import { ThoughtsText } from '../../../shares/detail/thoughts-text';
 import { readPublicShare } from '../../../shares/server/public-shares';
 import { readingDateLabel } from '../../../shares/dates';
 

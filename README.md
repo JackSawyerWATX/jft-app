@@ -1,4 +1,4 @@
-# Doorknob v0.3
+# Doorknob v0.4
 
 Doorknob is a mobile-first recovery reflection app. Read the sample reflection, write a text share, save it through the Next.js Backend for Frontend (BFF), revisit past shares, and optionally send a reading link to another person.
 
@@ -64,9 +64,9 @@ Shares are sent to the same-origin Next.js server and stored in a process-local 
 
 A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It expires after 30 days and is Secure in production. Different browser sessions cannot list or read one another's shares through the private endpoints; a shared UUID link separately grants read access to that share. Missing, invalid or expired cookies automatically start a fresh empty anonymous session. This is disposable prototype behavior: old ownership is never restored from invalid credentials, and previous records may remain in server memory but are inaccessible to the new owner. The signed cookie is readable, not encrypted, and must be treated as a bearer credential. Tabs sharing site cookies share an owner; use separate profiles/cookie jars to test isolation. Cookies do not provide login accounts or recovery. Saving waits for a successful initial session read; initialization failures retain the draft and offer retry. Foreign-origin POSTs are rejected before session creation and never replace the cookie. This prototype now uses Hono’s signed-cookie format; old-format cookies automatically start a fresh empty session. There is no cookie migration.
 
-**This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts are retained in this tab’s `sessionStorage` across refresh and About-page navigation, and cleared after a successful save or when that tab’s session storage is cleared. Drafts are not sent to the server until saving. If browser storage is unavailable, editing and saving still work in memory, but draft recovery after leaving the page is unavailable. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
+**This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts live only in React memory. Refreshing, closing the tab, or leaving the mounted app starts a fresh share. In-app Today/Past shares navigation and failed saves retain the current draft until refresh or a successful save. Older stored drafts are discarded on page load. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
-Signed sharing links are optional: saving prepares a URL but never sends it automatically. No audio, transcription, AI, registration, real reading feeds, or harness integration are included.
+Signed sharing links are optional: saving prepares a URL but never sends it automatically. No audio recording or storage, AI, registration, real reading feeds, or harness integration are included.
 
 ## Validation
 
@@ -98,27 +98,31 @@ Manual checks:
 
 ```text
 src/
-  app/                  App Router entry, layout, theme
-    api/shares/         Next.js exports for private share operations
-    api/openapi.json/   generated OpenAPI 3.1 contract
-  components/           app-wide header and footer
+  app/                       Next.js pages, API entry points, layout, theme
+  components/                app-wide header and footer
   shares/
-    share-app.tsx       React state, requests, and screen transitions
-    api.ts              browser fetch and response validation
-    components/         reading, form, history, and detail presentation
-    model.ts            shared Zod schemas, inferred types, and text limit
-    reflection-fixture.ts fictional daily reading
-    errors.ts           shared stable error codes and envelope
+    share-app.tsx            draft ownership, requests, screen transitions
+    api.ts                   browser fetch and response validation
+    model.ts                 shared schemas, types, and text limit
+    dates.ts, errors.ts      shared date formatting and error contracts
+    composer/
+      share-form.tsx         transcription and explicit saving coordination
+      live-transcript.tsx    inline transcript editing and scroll following
+      save-share-button.tsx  explicit save action
+      recording/             microphone control, status, clock, icon, accents
+    history/                 history hook, list, and list items
+    detail/                  saved-share detail, sharing action, thoughts text
+    reflection/              reading presentation and fictional fixture
+    transcription/           engine contract, browser adapter, lifecycle hook
     server/
-      operations/       create, list, read contracts and typed handlers
-      resource-methods.ts HEAD/OPTIONS/405 handling for share resources
-      app.ts            operation registration and dispatch
-      openapi.ts        shared contract helpers and metadata
-    use-share-history.ts History loading and initial session bootstrap
-    dates.ts            saved-date formatting
+      operations/            private/public operation contracts and handlers
+      app.ts                 operation registration and dispatch
+      repository.ts          owner-scoped storage boundary
 tests/
-  shares/               Node tests for schemas, routes, repository, and dates
-  e2e/                  Playwright user flows
+  shares/                    schemas, HTTP, repository, session, and date tests
+    transcription/           browser adapter and transcript helper tests
+      client/                DOM setup and provider-independent React hook tests
+  e2e/                       Playwright user flows
 ```
 
 Open http://localhost:3000/api/openapi.json for the generated contract. TypeScript route/Zod definitions are the source of truth. `npm run openapi:lint` generates ignored `.tmp/openapi.yaml` and checks it with Spectral; CI also uploads the YAML as the `openapi` workflow artifact. Generated YAML is not committed.
@@ -160,3 +164,48 @@ unpatched `braces` dependency chain in the development ESLint and Spectral tooli
 published braces version is 3.0.3, which remains affected. Do not use
 `npm audit fix --force`: its proposed Next.js lint configuration downgrade is not
 a compatible fix for this project. Revisit when the upstream tooling is patched.
+
+## Speak your share
+
+On Today’s Reflection, tap **Record your share**, allow microphone access, and speak. The control shows when access is pending or the microphone is listening. Final words appear in the editable textbox; **Still recognizing** shows provisional words that are never saved or persisted. Tap **Stop listening**, review and edit, then **Save privately**. Recording again adds a paragraph to the same draft. Automatic browser stops retain final text and allow another explicit start. Navigation cancels recognition. At 10,000 Unicode code points, dictation stops and retains the accepted draft; shorten it to add more.
+
+The browser’s standard or prefixed Web Speech API supplies recognition in your browser language (en-US fallback). Support and behavior vary across Chrome, Safari, operating systems, and device settings. Continuous/interim options are requests, not guarantees. Silence, calls, backgrounding, time limits, permission settings, and network/service failures can end recognition. Unsupported browsers retain normal typing and saving. Recognition generally needs HTTPS (localhost is suitable for local development); API presence does not guarantee service availability.
+
+**Privacy:** your browser may send microphone audio to its vendor or an online speech service. Offline/local processing is not guaranteed. Doorknob does not capture, upload, or store raw audio. Only finalized words enter the in-memory draft; only an explicit save sends text to Doorknob’s BFF. Review [draft and share retention](docs/DATA_GLOSSARY.md) before using sensitive text.
+
+### Physical iPhone and Android checks
+
+Use fictional recovery text and a trusted HTTPS development deployment reachable by the phone. A desktop LAN HTTP URL is not equivalent to localhost on the phone. No deployment or audio service is configured by this milestone.
+
+1. On iPhone Safari and Android Chrome, note OS/browser versions and open Today’s Reflection. Confirm no microphone prompt appears until tapping Record.
+2. Type a sentence, grant microphone permission, dictate, observe listening/provisional text, then stop. Confirm final words appear once, earlier typing remains, and saving waits for stop/finalization.
+3. Edit words, record again, and verify the new paragraph appends. Refresh after stopping to confirm a fresh, empty draft and reset timer; dictate again before saving. Save privately; check history, open the share, and open its link in a separate private browser.
+4. Test denial, later permission recovery, silence with no words, long pauses, network interruption, switching apps, a call interruption if practical, and leaving for Past shares while listening. Confirm the microphone stops and finalized text survives; restart only with another tap.
+5. Test a browser without recognition and confirm typing/saving work. Check narrow layout, large text settings, keyboard focus, and VoiceOver/TalkBack announcements. Test near the text limit with fictional text.
+
+Automated Node and mobile/desktop Playwright tests use deterministic API mocks, never a real microphone or live recognition service. Physical-device behavior must be checked separately. See [the replaceable engine contract](docs/ARCHITECTURE.md#speech-input).
+
+### Diagnosing speech recognition
+
+Open the app with `?speechDebug=1` (for example `https://your-doorknob-host/?speechDebug=1`), open browser developer tools → Console, enable **Info** messages, and filter for `[Doorknob speech]`. Enable **Preserve log** to keep navigation events. The switch is remembered only in this tab's sessionStorage; visit `?speechDebug=0` to turn it off. When storage is blocked, keep `?speechDebug=1` in the URL. The setting is resolved when the recording experience mounts, rather than on each speech event. No rebuild or server environment variable is required. On iPhone Safari use Safari's remote Web Inspector from a Mac; Android Chrome supports remote inspection from desktop Chrome.
+
+Reproduce the problem and inspect the progression:
+
+- `availability` reports API support/prefix, HTTPS secure-context status, online status, and page visibility.
+- `editor-start` → `start-requested` → `start-returned` means the app reached the browser API. `start-failed` identifies constructor/configuration/start failures with an allowlisted exception name. A missing `recognition-start` after `start-returned` means the browser has not confirmed listening; check its permission prompt and site/OS microphone settings.
+- `recognition-start`, `audio-start`, `sound-start`, and `speech-start` show the browser's reported progress from recognition startup to microphone audio and speech detection. Browsers may omit some of these events; absence alone does not prove a failure.
+- `results` shows result/segment counts and duplicate final suppression. `final-committed` shows a final segment reaching the editor; provisional/final text is never printed. `editor-state` traces lifecycle changes.
+- `recognition-error` includes only a known code: `not-allowed`/`service-not-allowed` suggests permission/policy or service restrictions, `audio-capture` a microphone problem, `network` a browser speech-service connection failure, and `no-speech` no recognized speech. Unknown values become `unknown`; raw messages and exceptions are omitted.
+- `stop-requested`, `recognition-end` (with whether stop was requested), `stop-timeout`, `dispose`, `editor-unmount`, connectivity, and visibility events help diagnose interruption and cleanup. Session numbers and elapsed milliseconds correlate browser events; capability-only checks also receive session numbers. Lifecycle/commit logs use the editor's separate session counter.
+
+Diagnostics are off by default and written only to your browser console. They contain no transcript/draft text, audio, share IDs, URLs, credentials, or raw error messages, and are not uploaded by Doorknob. You can copy the filtered diagnostics when reporting a problem. Recognition API presence and online status do not guarantee a working vendor service. No BFF speech request is expected: browser-managed recognition happens outside Doorknob's save endpoint.
+
+### Recording screen
+
+The large circular microphone starts and pauses speech recognition. Its ring and side accents brighten when the browser reports speech or delivers recognized words; they are speech activity cues, not a measured audio waveform or volume meter. Browser support for speech-activity events varies, so result updates also briefly illuminate the accents. The timer counts time spent listening across sessions in the current editor view, not the duration of an audio recording. No additional microphone capture or audio storage is used.
+
+Below the microphone, a bounded teleprompter shows the current share and provisional words in italics. It follows new text without scrolling the page. Scroll upward to read earlier words; scroll back to the bottom to resume following. The transcript itself supports typing and corrections, without a separate editing section. Refresh starts fresh; drafts are not recovered from browser storage. Provisional words remain excluded from the draft and save payload. The accents respect reduced-motion preferences.
+
+The teleprompter uses `react-textarea-autosize` to keep existing words visible when the viewport size or fonts change. It continues to follow new words while preserving deliberate scrollback. The engine hook accepts a replacement factory selected once per mount for future streaming providers; provider-independent hook tests run with React Testing Library and jsdom as development-only dependencies.
+
+Silence (`no-speech`) ends recognition normally and keeps finalized words; microphone capture failures suggest checking the microphone and browser settings. Late listening callbacks cannot restart a session that is stopping. The lifecycle tests include root-level React Strict Mode setup/cleanup replay and resource cleanup on unmount.

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createShareSchema, shareSchema } from '../../src/shares/model';
-import { reflection } from '../../src/shares/reflection-fixture';
+import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
 test('accepts and trims text; rejects blank, malformed and client metadata', () => {
   assert.deepEqual(

@@ -5,7 +5,7 @@ import { serializeSigned } from 'hono/utils/cookie';
 import { NextRequest } from 'next/server';
 import { GET, POST } from '../../src/app/api/shares/route';
 import { GET as getDetail } from '../../src/app/api/shares/[id]/route';
-import { reflection } from '../../src/shares/reflection-fixture';
+import { reflection } from '../../src/shares/reflection/reflection-fixture';
 import { shareRepository } from '../../src/shares/server/repository';
 
 function request(method = 'GET', cookie?: string, body?: unknown) {

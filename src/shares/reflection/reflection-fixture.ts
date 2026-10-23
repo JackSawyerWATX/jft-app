@@ -1,4 +1,4 @@
-import type { Reflection } from './model';
+import type { Reflection } from '../model';
 
 /** Fictional placeholder used by the UI and copied by the server when saving a share. */
 export const reflection: Reflection = {

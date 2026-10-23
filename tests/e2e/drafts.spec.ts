@@ -1,30 +1,66 @@
 import { expect, test } from '@playwright/test';
 
-test('retains a draft through About, browser Back, refresh, and a failed save; clears it after saving', async ({
+test('refresh starts fresh, ignores legacy stored drafts, and retains saved history', async ({
   page
 }) => {
-  const text = 'A fictional unfinished reflection.\nWords to return to.';
+  await page.addInitScript(() =>
+    sessionStorage.setItem('doorknob:share-draft', 'Fictional legacy draft.')
+  );
   await page.goto('/');
-  await page.getByRole('textbox').fill(text);
-  await page.getByRole('link', { name: 'About Doorknob' }).click();
+  const field = page.getByRole('textbox', { name: 'Your share' });
+  await expect(field).toHaveValue('');
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem('doorknob:share-draft'))
+    )
+    .toBeNull();
+  await field.fill('A fictional draft to discard.');
+  await page.reload();
+  await expect(field).toHaveValue('');
+  await expect(page.getByLabel('Listening time')).toHaveText('00:00');
   await expect(
-    page.getByRole('heading', { name: 'The Story of the Doorknob' })
+    page.getByRole('button', { name: 'Save privately' })
+  ).toBeDisabled();
+  await expect(page.getByText('Edit your share', { exact: true })).toHaveCount(
+    0
+  );
+  await expect(
+    page.getByText(/Speech recognition is provided by your browser/)
+  ).toHaveCount(0);
+  await expect(page.getByRole('textbox')).toHaveCount(1);
+  await field.fill('A fictional saved share to keep.');
+  await page.getByRole('button', { name: 'Save privately' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
+  await page.reload();
+  await expect(field).toHaveValue('');
   await page
-    .getByRole('link', { name: "Today's reflection", exact: true })
+    .getByRole('banner')
+    .getByRole('button', { name: 'Past shares' })
+    .click();
+  await expect(page.getByRole('listitem')).toContainText(
+    'A fictional saved share to keep.'
+  );
+});
+
+test('retains drafts through in-app views and a failed save, then discards them on refresh', async ({
+  page
+}) => {
+  await page.goto('/');
+  const text = 'Fictional unsaved words.';
+  await page.getByRole('textbox').fill(text);
+  await page
+    .getByRole('banner')
+    .getByRole('button', { name: 'Past shares' })
+    .click();
+  await page
+    .getByRole('banner')
+    .getByRole('button', { name: 'Today’s reflection' })
     .click();
   await expect(page.getByRole('textbox')).toHaveValue(text);
-  await page.getByRole('link', { name: 'About Doorknob' }).click();
-  await expect(page).toHaveURL(/\/about$/);
-  await expect(
-    page.getByRole('heading', { name: 'The Story of the Doorknob' })
-  ).toBeVisible();
-  await page.goBack();
-  await expect(page.getByRole('textbox')).toHaveValue(text);
-  await page.reload();
-  await expect(page.getByRole('textbox')).toHaveValue(text);
   await page.route('**/api/shares', async (route) => {
-    if (route.request().method() === 'POST') {
+    if (route.request().method() === 'POST')
       await route.fulfill({
         status: 503,
         contentType: 'application/json',
@@ -32,40 +68,25 @@ test('retains a draft through About, browser Back, refresh, and a failed save; c
           error: { code: 'INTERNAL_ERROR', message: 'Please try again.' }
         })
       });
-    } else await route.continue();
+    else await route.continue();
   });
   await page.getByRole('button', { name: 'Save privately' }).click();
   await expect(page.locator('form').getByRole('alert')).toBeVisible();
-  await page.reload();
   await expect(page.getByRole('textbox')).toHaveValue(text);
-  await page.unroute('**/api/shares');
-  await page.getByRole('button', { name: 'Save privately' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Your share is saved.' })
-  ).toBeVisible();
   await page.reload();
   await expect(page.getByRole('textbox')).toHaveValue('');
 });
 
-test('does not restore a deliberately erased draft', async ({ page }) => {
-  await page.goto('/');
-  await page.getByRole('textbox').fill('A fictional draft to erase.');
-  await page.getByRole('textbox').fill('');
-  await page.reload();
-  await expect(page.getByRole('textbox')).toHaveValue('');
-});
-
-test('editing and saving still work when browser storage is unavailable', async ({
+test('typing and saving work when browser storage is unavailable', async ({
   page
 }) => {
-  await page.addInitScript(() => {
+  await page.addInitScript(() =>
     Object.defineProperty(window, 'sessionStorage', {
-      configurable: true,
       get() {
         throw new DOMException('Storage unavailable', 'SecurityError');
       }
-    });
-  });
+    })
+  );
   await page.goto('/');
   await page
     .getByRole('textbox')

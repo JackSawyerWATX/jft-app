@@ -1,13 +1,18 @@
+/* Theme and base */
+
 @import 'tailwindcss';
+
 @theme {
   --font-serif: Georgia, 'Times New Roman', serif;
 }
+
 :root {
   --navy: #102b3c;
   --muted: #617084;
   --line: #deded5;
   --paper: #fffdf7;
 }
+
 body {
   margin: 0;
   background: #faf8f1;
@@ -15,31 +20,42 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
 button {
   cursor: pointer;
 }
+
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 5px;
 }
+
 button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* Header and navigation */
+
 .brand {
   font-family: Georgia, serif;
   font-size: 27px;
   letter-spacing: -1.2px;
 }
+
 .nav-link {
   min-height: 44px;
   font-size: 13px;
   color: #536579;
 }
+
 .nav-link span {
   margin-left: 6px;
 }
+
+/* Reflection reading */
+
 .eyebrow {
   font-size: 10px;
   font-weight: 500;
@@ -48,18 +64,23 @@ button:disabled {
   color: var(--muted);
   line-height: 1.7;
 }
+
 .divider {
   width: 28px;
   height: 1px;
   background: #8895a2;
   margin: 23px auto;
 }
+
 .reading-body {
   font-family: Georgia, serif;
   font-size: 17px;
   line-height: 1.65;
   color: #536579;
 }
+
+/* Shared buttons */
+
 .primary,
 .secondary {
   display: flex;
@@ -73,34 +94,213 @@ button:disabled {
   font-size: 19px;
   transition: background 0.15s;
 }
+
 .primary {
   background: var(--navy);
   color: #fffdf7;
   border: 1px solid var(--navy);
 }
+
 .primary:hover:not(:disabled) {
   background: #224459;
 }
+
 .secondary {
   border: 1px solid #bdc6cc;
 }
+
 .secondary:hover,
 .share-row:hover {
   background: #f1eee5;
 }
+
+/* Shares and feedback */
+
 .check,
 .empty {
   background: #f3eddf;
 }
+
 .share-card {
   background: var(--paper);
   box-shadow: 0 4px 20px #102b3c03;
 }
+
 .error {
   color: #79422c;
   border-color: #d8bba8;
   background: #fff4eb;
 }
+
+/* Recorder layout and controls */
+
+.voice-studio {
+  margin: 2rem 0 1.5rem;
+}
+
+.microphone-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.microphone-ring {
+  flex: none;
+  padding: 12px;
+  border: 2px solid #ece6d8;
+  border-radius: 50%;
+  background: #f5f0e5;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+}
+
+.record-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 154px;
+  height: 154px;
+  border-radius: 50%;
+  border: 3px solid var(--paper);
+  color: var(--paper);
+  background: radial-gradient(circle at 40% 25%, #1c4054, #102b3c 75%);
+  box-shadow: 0 4px 14px #102b3c12;
+  transition:
+    transform 0.2s,
+    background 0.3s;
+}
+
+.record-button:hover:not(:disabled) {
+  transform: scale(1.025);
+}
+
+.record-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.speech-bars {
+  min-width: 0;
+  flex: 1;
+  max-width: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+  height: 80px;
+}
+
+.speech-bars span {
+  flex-shrink: 1;
+  width: 3px;
+  border-radius: 4px;
+  background: #cbd3d7;
+  transform: scaleY(0.65);
+  transition:
+    background 0.25s,
+    transform 0.25s;
+}
+
+.listening-clock {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 30px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+/* Recorder states and animation */
+
+.voice-studio[data-listening='true'] .microphone-ring {
+  border-color: #a5b6bf;
+}
+
+.voice-studio[data-speaking='true'] .microphone-ring {
+  border-color: #345c71;
+  box-shadow: 0 0 0 7px #102b3c08;
+}
+
+.voice-studio[data-speaking='true'] .speech-bars span {
+  background: var(--navy);
+  animation: speech-glow 0.65s ease-in-out infinite alternate;
+}
+
+.voice-studio[data-paused='true'] .record-button {
+  background: #eee7d8;
+  color: var(--navy);
+}
+
+@keyframes speech-glow {
+  from {
+    transform: scaleY(0.65);
+    opacity: 0.65;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* Live transcript */
+
+.transcript-wrap {
+  margin-top: 24px;
+}
+
+.live-transcript {
+  height: 138px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 16px;
+  border-block: 1px solid #e9e4d9;
+  font-family: var(--font-serif);
+  text-align: center;
+  font-size: 21px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd3d7 transparent;
+}
+
+.live-transcript:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 4px;
+}
+
+.transcript-input {
+  display: block;
+  width: 100%;
+  min-height: 2rem;
+  border: 0;
+  padding: 0;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  outline: none;
+}
+
+.transcript-input::placeholder {
+  color: var(--muted);
+}
+
+.transcript-input:focus-visible {
+  outline: 1px solid var(--line);
+  outline-offset: 3px;
+}
+
+.transcript-interim {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Small screens */
+
 @media (max-width: 380px) {
   .brand {
     font-size: 24px;
@@ -111,32 +311,34 @@ button:disabled {
   }
 }
 
-.share-textarea {
-  min-height: 12rem;
-  width: 100%;
-  resize: vertical;
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  background: var(--paper);
-  padding: 1.25rem;
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  line-height: 1.625;
-  outline: none;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.share-textarea::placeholder {
-  color: var(--muted);
-}
-.share-textarea:focus {
-  border-color: var(--navy);
-  box-shadow: 0 0 0 1px var(--navy);
+@media (max-width: 360px) {
+  .record-button {
+    width: 132px;
+    height: 132px;
+  }
+  .microphone-stage {
+    gap: 8px;
+  }
+  .speech-bars {
+    gap: 2px;
+  }
+  .microphone-ring {
+    padding: 9px;
+  }
 }
 
-@media (min-width: 640px) {
-  .share-textarea {
-    min-height: 16rem;
+/* Reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-studio .speech-bars span {
+    animation: none !important;
+  }
+  .voice-studio[data-speaking='true'] .speech-bars span {
+    transform: scaleY(1);
+  }
+  .record-button,
+  .microphone-ring,
+  .speech-bars span {
+    transition: none;
   }
 }

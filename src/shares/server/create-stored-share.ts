@@ -2,7 +2,7 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createShareSchema, shareSchema } from '../model';
-import { reflection } from '../reflection-fixture';
+import { reflection } from '../reflection/reflection-fixture';
 
 const storedShareSchema = shareSchema.extend({ ownerId: z.uuid() });
 /** Server-only record; project through shareSchema before returning it to the owner. */
