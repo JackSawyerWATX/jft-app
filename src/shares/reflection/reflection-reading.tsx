@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { reflection } from '../reflection-fixture';
+import { reflection } from './reflection-fixture';
 import { readingDateLabel } from '../dates';
 
 function currentDate() {

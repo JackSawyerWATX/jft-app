@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Share } from './model';
 import { readShare, saveShare } from './api';
-import { ShareForm } from './components/share-form';
-import { ShareHistory } from './components/share-history';
-import { useShareHistory } from './use-share-history';
-import { ShareDetail } from './components/share-detail';
-import { ReflectionReading } from './components/reflection-reading';
+import { ShareForm } from './composer/share-form';
+import { ShareHistory } from './history/share-history';
+import { useShareHistory } from './history/use-share-history';
+import { ShareDetail } from './detail/share-detail';
+import { ReflectionReading } from './reflection/reflection-reading';
 import { AppHeader } from '../components/app-header';
 import { AppFooter } from '../components/app-footer';
 
@@ -20,8 +20,8 @@ type DetailState =
 
 const screenCopy = {
   today: {
-    title: 'Your thoughts',
-    description: 'What stood out to you today?'
+    title: 'Record your share',
+    description: 'Speak from your own experience'
   },
   past: {
     title: 'Past shares',
@@ -37,9 +37,7 @@ const screenCopy = {
   }
 };
 
-const draftStorageKey = 'doorknob:share-draft';
-
-/** Keep a tab-local draft across refresh and navigation; clear only after a confirmed save. */
+/** Drafts live only in this mounted app; a fresh page starts a fresh share. */
 export function ShareApp() {
   const [screen, setScreen] = useState<Screen>({ view: 'today' });
   const { view } = screen;
@@ -56,25 +54,13 @@ export function ShareApp() {
   const navigated = useRef(false);
 
   useEffect(() => {
+    // Remove drafts left by older versions; never restore or persist share text.
     try {
-      const draft = window.sessionStorage.getItem(draftStorageKey);
-      // Restore browser-only storage after hydration so the initial render matches the server.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (draft !== null) setText(draft);
+      window.sessionStorage.removeItem('doorknob:share-draft');
     } catch {
-      // Storage may be unavailable; writing and saving still work in component memory.
+      /* Storage is optional. */
     }
   }, []);
-
-  function updateDraft(nextText: string) {
-    setText(nextText);
-    try {
-      if (nextText) window.sessionStorage.setItem(draftStorageKey, nextText);
-      else window.sessionStorage.removeItem(draftStorageKey);
-    } catch {
-      // A storage restriction must never prevent editing or a confirmed save.
-    }
-  }
 
   useEffect(
     () => () => {
@@ -120,7 +106,7 @@ export function ShareApp() {
     setSaveError('');
     try {
       const share = await saveShare(text);
-      updateDraft('');
+      setText('');
       navigate({ view: 'saved', share });
     } catch (cause) {
       setSaveError(
@@ -157,13 +143,13 @@ export function ShareApp() {
         <h1
           ref={heading}
           tabIndex={-1}
-          className={`font-serif leading-[1.1] tracking-[-0.035em] outline-none ${view === 'today' ? 'text-2xl tracking-normal' : view === 'saved' ? 'text-center text-3xl sm:text-4xl' : 'text-[36px] sm:text-5xl'} ${view === 'today' ? 'mt-8 sm:mt-12' : ''}`}
+          className={`font-serif leading-[1.1] tracking-[-0.035em] outline-none ${view === 'today' ? 'text-center text-[36px] sm:text-5xl' : view === 'saved' ? 'text-center text-3xl sm:text-4xl' : 'text-[36px] sm:text-5xl'} ${view === 'today' ? 'mt-8 sm:mt-12' : ''}`}
         >
           {title}
         </h1>
         {description && (
           <p
-            className={`mt-3 text-[16px] leading-relaxed text-[var(--muted)] ${view === 'saved' ? 'text-center' : ''}`}
+            className={`mt-3 text-[16px] leading-relaxed text-[var(--muted)] ${view === 'saved' || view === 'today' ? 'text-center' : ''}`}
           >
             {description}
           </p>
@@ -202,7 +188,7 @@ export function ShareApp() {
             disabled={saving || !sessionReady}
             saving={saving}
             error={saveError}
-            onTextChange={updateDraft}
+            onTextChange={setText}
             onSave={save}
           />
         )}

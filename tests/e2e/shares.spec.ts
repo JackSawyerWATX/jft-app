@@ -80,7 +80,7 @@ test('preserves a failed draft and saves it exactly once on retry', async ({
     'could not be saved'
   );
   await expect(
-    page.getByRole('heading', { name: 'Your thoughts' })
+    page.getByRole('heading', { name: 'Record your share' })
   ).toBeVisible();
 
   await page.unroute('**/api/shares');

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { readShares } from './api';
-import type { Share } from './model';
+import { readShares } from '../api';
+import type { Share } from '../model';
 
 /** Only a successfully loaded empty array means there are no saved shares. */
 export type ShareHistoryState =

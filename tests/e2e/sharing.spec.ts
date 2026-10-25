@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { reflection } from '../../src/shares/reflection-fixture';
+import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
 const fictionalText =
   'A fictional thought for a fellow alcoholic.\nOne day at a time.';
@@ -265,7 +265,7 @@ test('long thoughts appear in full on owner and recipient pages, and recipients 
     await expect(write).toHaveAttribute('href', '/');
     await write.click();
     await expect(
-      reader.getByRole('heading', { name: 'Your thoughts', exact: true })
+      reader.getByRole('heading', { name: 'Record your share', exact: true })
     ).toBeVisible();
     await reader
       .getByRole('textbox')

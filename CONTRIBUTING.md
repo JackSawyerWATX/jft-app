@@ -39,7 +39,7 @@ npm run check
 
 ## Organization and documentation
 
-Group source by responsibility under `src/` and mirror those groups under `tests/`. Use direct imports, with no barrel files or path aliases. Keep abstractions proportional to the current milestone.
+Group source by responsibility under `src/` and mirror those groups under `tests/`. Use direct imports, with no barrel files or path aliases. Keep abstractions proportional to the current milestone. Share UI is grouped into `composer/` (including `recording/`), `history/`, `detail/`, and `reflection/`; keep adapter/lifecycle code in `transcription/` and backend operations in `server/`.
 
 ESLint uses Next.js 16’s native flat configurations for Core Web Vitals and TypeScript; keep `eslint-config-next` aligned with the Next.js major version. Prettier owns formatting; `.editorconfig` supplies matching editor defaults. Use TSDoc for exported functions and types, explaining contracts and escaping failures. Document meaningful parameters, return values, ownership/trust requirements, and side effects at the source. For asynchronous functions, `@throws` describes promise rejections; for Route Handlers and wrappers that catch errors, document returned HTTP failures under `@returns`. Keep presentation-component comments proportional to their state/callback responsibilities rather than repeating markup.
 
@@ -55,7 +55,7 @@ Keep each detailed contract in its owning document and link to it from summaries
 
 ## Testing
 
-Add or update meaningful tests when behavior changes. Use fictional text and synthetic credentials in fixtures and test output. Do not call live model providers or external services from the default test command.
+Add or update meaningful tests when behavior changes. `npm test` runs server-bound tests with the React server condition, then client hook tests in `tests/shares/transcription/client/` in a separate process using React Testing Library and jsdom. Keep browser/provider-independent hook tests out of the server-bound test group. Use fictional text and synthetic credentials in fixtures and test output. Do not call live model providers or external services from the default test command.
 
 For UI changes, manually check phone and desktop layouts, keyboard use, and error states. Report manual verification separately from automated tests. CI also runs `npm run test:e2e` after installing Chromium; locally, use the browser setup commands in the README. See the README for the manual checklist.
 
