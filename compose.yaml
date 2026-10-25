@@ -1,0 +1,46 @@
+name: jft-app
+
+services:
+  user-content-db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: user_content
+      POSTGRES_USER: user_content_admin
+      POSTGRES_PASSWORD: ${USER_CONTENT_DB_PASSWORD:?Set USER_CONTENT_DB_PASSWORD in .env.database}
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - user-content-data:/var/lib/postgresql/data
+      - ./database/user-content/001-initial.sql:/docker-entrypoint-initdb.d/001-initial.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U user_content_admin -d user_content']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  daily-reflections-db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: daily_reflections
+      POSTGRES_USER: daily_reflections_admin
+      POSTGRES_PASSWORD: ${DAILY_REFLECTIONS_DB_PASSWORD:?Set DAILY_REFLECTIONS_DB_PASSWORD in .env.database}
+    ports:
+      - '127.0.0.1:5434:5432'
+    volumes:
+      - daily-reflections-data:/var/lib/postgresql/data
+      - ./database/daily-reflections/001-initial.sql:/docker-entrypoint-initdb.d/001-initial.sql:ro
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U daily_reflections_admin -d daily_reflections'
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  user-content-data:
+  daily-reflections-data:
