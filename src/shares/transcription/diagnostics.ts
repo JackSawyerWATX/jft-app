@@ -3,23 +3,25 @@ type DiagnosticDetails = {
   session?: number;
   elapsedMs?: number;
   supported?: boolean;
-  prefixed?: boolean;
-  secureContext?: boolean;
+  userActivation?: boolean;
   online?: boolean;
   visible?: boolean;
-  language?: string;
-  resultIndex?: number;
-  results?: number;
-  finalized?: number;
-  provisional?: number;
-  duplicateFinals?: number;
-  stopRequested?: boolean;
   state?: string;
   code?: string;
   stage?: string;
+  status?: number;
+  characters?: number;
+  packets?: number;
+  bytes?: number;
+  speaking?: boolean;
 };
 
 let enabled = false;
+
+/** Read the cached opt-in switch without touching browser storage during streaming. */
+export function speechDiagnosticsEnabled() {
+  return enabled;
+}
 
 /** Resolve the URL/tab debug switch once when the recording experience mounts. */
 export function configureSpeechDiagnostics() {
@@ -53,27 +55,4 @@ export function speechDiagnostic(
   } catch {
     // A restricted console must not interrupt recognition.
   }
-}
-
-/** Browser error codes are public enums. Unrecognized values and exception messages stay private. */
-export function speechErrorCode(value: unknown): string {
-  return typeof value === 'string' &&
-    [
-      'no-speech',
-      'aborted',
-      'audio-capture',
-      'network',
-      'not-allowed',
-      'service-not-allowed',
-      'bad-grammar',
-      'language-not-supported',
-      'phrases-not-supported',
-      'InvalidStateError',
-      'NotAllowedError',
-      'SecurityError',
-      'NotSupportedError',
-      'AbortError'
-    ].includes(value)
-    ? value
-    : 'unknown';
 }

@@ -42,7 +42,7 @@ function setup(initialText = 'Typed.', supported = true) {
   };
   const hook = renderHook(() => {
     const [text, setText] = useState(initialText);
-    return { text, ...useTranscription(text, setText, createEngine) };
+    return { text, ...useTranscription(text, setText, { createEngine }) };
   });
   return { ...hook, engines, latest: () => engines.at(-1)! };
 }
@@ -160,7 +160,7 @@ test('rerendering with a new factory reference does not cancel the selected engi
     return engine;
   };
   const hook = renderHook(
-    ({ factory }) => useTranscription('', () => {}, factory),
+    ({ factory }) => useTranscription('', () => {}, { createEngine: factory }),
     { initialProps: { factory: () => create() } }
   );
   act(() => hook.result.current.start());
@@ -199,7 +199,10 @@ test('Strict Mode setup-cleanup-setup releases probes and unmount cancels activi
   const hook = renderHook(
     () => {
       const [text, setText] = useState('Typed.');
-      return { text, ...useTranscription(text, setText, factory) };
+      return {
+        text,
+        ...useTranscription(text, setText, { createEngine: factory })
+      };
     },
     { reactStrictMode: true }
   );
@@ -224,4 +227,89 @@ test('Strict Mode setup-cleanup-setup releases probes and unmount cancels activi
     active.events!.final('Stale.');
   });
   assert.equal(hook.result.current.text, 'Typed.');
+});
+
+test('synchronous engine startup failure preserves the draft and releases the session', () => {
+  const engines: FakeEngine[] = [];
+  const factory = () => {
+    const engine = new FakeEngine();
+    engine.start = () => {
+      throw new Error('private startup details');
+    };
+    engines.push(engine);
+    return engine;
+  };
+  const hook = renderHook(() =>
+    useTranscription('Existing words.', () => {}, { createEngine: factory })
+  );
+  act(() => hook.result.current.start());
+  assert.equal(hook.result.current.state, 'error');
+  assert.match(hook.result.current.message, /could not start/);
+  assert.equal(engines.at(-1)!.disposed, true);
+  assert.ok(!hook.result.current.message.includes('private'));
+});
+
+test('automatic cleanup is notified only after an explicit stop successfully finalizes new words', () => {
+  const engines: FakeEngine[] = [],
+    completed: string[] = [];
+  const factory = () => {
+    const engine = new FakeEngine();
+    engines.push(engine);
+    return engine;
+  };
+  const hook = renderHook(() => {
+    const [text, setText] = useState('Typed.');
+    return {
+      text,
+      ...useTranscription(text, setText, {
+        createEngine: factory,
+        onStopped: (value) => completed.push(value)
+      })
+    };
+  });
+  act(() => hook.result.current.start());
+  act(() => engines.at(-1)!.events!.final('First final.'));
+  act(() => hook.result.current.stop());
+  assert.deepEqual(completed, []);
+  act(() => {
+    engines.at(-1)!.events!.final('Trailing final.');
+    engines.at(-1)!.events!.ended();
+  });
+  assert.deepEqual(completed, ['Typed.\n\nFirst final. Trailing final.']);
+  act(() => {
+    hook.result.current.start();
+    engines.at(-1)!.events!.final('Automatic ending.');
+    engines.at(-1)!.events!.ended();
+  });
+  assert.equal(completed.length, 1);
+  act(() => {
+    hook.result.current.start();
+    hook.result.current.stop();
+    engines.at(-1)!.events!.ended();
+  });
+  assert.equal(completed.length, 1);
+  act(() => {
+    hook.result.current.start();
+    engines.at(-1)!.events!.final('Retained.');
+    hook.result.current.stop();
+    engines.at(-1)!.events!.error('Failure.');
+  });
+  assert.equal(completed.length, 1);
+});
+
+test('microphone grant advances to connecting and late connection callbacks cannot resume a canceled session', () => {
+  const s = setup();
+  act(() => s.result.current.start());
+  const engine = s.latest();
+  act(() => engine.events!.connecting?.());
+  assert.equal(s.result.current.state, 'connecting');
+  assert.equal(s.result.current.active, true);
+  act(() => s.result.current.stop());
+  act(() => {
+    engine.events!.connecting?.();
+    engine.events!.listening();
+  });
+  assert.equal(s.result.current.state, 'stopping');
+  act(() => engine.events!.ended());
+  assert.equal(s.result.current.state, 'idle');
 });

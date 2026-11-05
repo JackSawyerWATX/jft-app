@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures/test';
 import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
 const fictionalText =
@@ -19,6 +19,7 @@ async function save(page: Page) {
 test('share icon uses the saved URL directly for native sharing and session-free reading', async ({
   page,
   browser,
+  watchPage,
   baseURL
 }) => {
   await page.addInitScript(() =>
@@ -53,9 +54,10 @@ test('share icon uses the saved URL directly for native sharing and session-free
       exact: true
     })
   ).toBeVisible();
-  const recipient = await browser.newContext();
+  const recipient = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     const reader = await recipient.newPage();
+    watchPage(reader);
     const response = await reader.goto(link);
     expect(response!.status()).toBe(200);
     expect(response!.headers()['cache-control']).toContain('private');
@@ -167,6 +169,22 @@ test('unsupported native sharing copies directly, with manual copying only when 
   );
   await button.click();
   await expect(page.getByLabel('Sharing link')).toBeFocused();
+  // The footer stays above the actual bar height as manual controls grow and text wraps.
+  await page.addStyleTag({ content: 'html { font-size: 22px; }' });
+  await page.setViewportSize({ width: 340, height: 760 });
+  await expect
+    .poll(async () => {
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      const footer = await page
+        .getByRole('link', { name: 'About Doorknob' })
+        .boundingBox();
+      const actions = await page
+        .getByRole('region', { name: 'Share actions' })
+        .boundingBox();
+      return footer!.y + footer!.height <= actions!.y;
+    })
+    .toBe(true);
+  await expect(button).toBeInViewport();
 });
 
 test('native cancellation stays silent and native failures fall back to copying', async ({
@@ -212,9 +230,10 @@ test('native cancellation stays silent and native failures fall back to copying'
   await expect(page.getByRole('status')).toHaveText('Link copied.');
 });
 
-test('long thoughts appear in full on owner and recipient pages, and recipients can start writing', async ({
+test('owner thoughts collapse while sharing stays visible and recipients see the full share', async ({
   page,
   browser,
+  watchPage,
   baseURL
 }) => {
   const text =
@@ -227,11 +246,33 @@ test('long thoughts appear in full on owner and recipient pages, and recipients 
   );
   await page.getByRole('button', { name: 'Save privately' }).click();
   const saved = await (await response).json();
+  const sharing = page.getByRole('button', {
+    name: 'Share with fellow alcoholic',
+    exact: true
+  });
+  await expect(sharing).toBeInViewport();
+  const expand = page.getByRole('button', { name: 'Read more', exact: true });
+  await expect(expand).toHaveAttribute('aria-expanded', 'false');
+  await expect(
+    page.locator('article').getByText(text, { exact: true })
+  ).toHaveCount(0);
+  await expand.click();
+  await expect(page.getByRole('button', { name: 'Show less' })).toHaveAttribute(
+    'aria-expanded',
+    'true'
+  );
   await expect(
     page.locator('article').getByText(text, { exact: true })
   ).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(sharing).toBeInViewport();
+  const note = page.getByText('Anyone with this link can view your share.', {
+    exact: true
+  });
+  await expect(note).toHaveCSS('text-align', 'center');
+  await page.getByRole('button', { name: 'Show less' }).click();
   await expect(
-    page.getByRole('button', { name: /Read more|Show less/ })
+    page.locator('article').getByText(text, { exact: true })
   ).toHaveCount(0);
   await page
     .getByRole('main')
@@ -239,15 +280,17 @@ test('long thoughts appear in full on owner and recipient pages, and recipients 
     .click();
   await expect(page.getByRole('listitem')).toContainText(text);
   await page.getByRole('listitem').getByRole('button').click();
+  await page.getByRole('button', { name: 'Read more', exact: true }).click();
   await expect(
     page.locator('article').getByText(text, { exact: true })
   ).toBeVisible();
   await expect(
     page.getByText('A moment you made space for yourself.')
   ).toHaveCount(0);
-  const recipient = await browser.newContext();
+  const recipient = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     const reader = await recipient.newPage();
+    watchPage(reader);
     await reader.goto(new URL(saved.shareUrl, baseURL).href);
     await expect(
       reader

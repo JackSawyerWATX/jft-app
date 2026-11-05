@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { InMemoryShareRepository } from '../../src/shares/server/repository';
-import { createStoredShare } from '../../src/shares/server/create-stored-share';
+import { InMemoryShareRepository } from '../../src/shares/server/storage/repository';
+import { createStoredShare } from '../../src/shares/server/storage/create-stored-share';
 import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
 test('repository instances isolate data, reject invalid writes, and detach every read', async () => {

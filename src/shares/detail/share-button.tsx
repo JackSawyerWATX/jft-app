@@ -50,7 +50,7 @@ export function ShareButton({ url }: { url: string }) {
     }
   }
   return (
-    <div className="mt-6">
+    <div>
       <button
         type="button"
         aria-label="Share with fellow alcoholic"
@@ -76,7 +76,7 @@ export function ShareButton({ url }: { url: string }) {
         </svg>
         <span>Share with fellow alcoholic</span>
       </button>
-      <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">
+      <p className="mt-3 text-center text-xs leading-relaxed text-[var(--muted)]">
         Anyone with this link can view your share.
       </p>
       {status && (

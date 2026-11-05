@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getSession, setSessionCookie } from '../../src/shares/server/session';
+import {
+  getSession,
+  setSessionCookie
+} from '../../src/shares/server/auth/session';
 
 test('typed new-session payloads round-trip through cookies without rolling renewal', async () => {
   const created = await getSession(new Request('http://localhost/api/shares'));
@@ -31,7 +34,7 @@ test('stale signing keys and expired credentials start fresh owners without trus
   const { serializeSigned } = await import('hono/utils/cookie');
   const { randomUUID } = await import('node:crypto');
   const { InMemoryShareRepository } =
-    await import('../../src/shares/server/repository');
+    await import('../../src/shares/server/storage/repository');
   const now = 1_800_000_000;
   const ownerId = randomUUID();
   const key = 'fictional-current-session-key-at-least-32-bytes';

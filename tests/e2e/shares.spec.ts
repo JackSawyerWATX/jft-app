@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test';
 
 // Each test gets an isolated browser context and uses invented reflection text.
 test('saves, persists, and opens shares in newest-first order', async ({
@@ -262,7 +262,7 @@ test('real HTTP requests retain shares and isolate browser sessions', async ({
       await page.context().request.get(`${baseURL}/api/shares/${share.id}`)
     ).json()
   ).toEqual(share);
-  const second = await browser.newContext();
+  const second = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     expect(
       await (await second.request.get(`${baseURL}/api/shares`)).json()

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HTTPException } from 'hono/http-exception';
-import { handleApiError } from '../../src/shares/server/http';
+import { handleApiError } from '../../src/shares/server/http/errors';
 
 test('unrecognized HTTP exceptions remain generic internal failures', async () => {
   for (const status of [400, 404, 413, 415] as const) {

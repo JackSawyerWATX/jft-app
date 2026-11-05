@@ -3,6 +3,7 @@ import type { TranscriptionState } from '../../transcription/types';
 const statusLabels = {
   unsupported: 'Sorry, transcription is unavailable for your browser!',
   starting: 'Waiting for microphone access…',
+  connecting: 'Connecting transcription…',
   listening: 'Listening...',
   stopping: 'Finishing your words…'
 };

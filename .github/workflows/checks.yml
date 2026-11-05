@@ -8,10 +8,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
-    name: Verify
-    runs-on: ubuntu-latest
+  quality:
+    name: Code and contracts
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -20,8 +24,18 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Verify code and generated OpenAPI (Spectral)
-        run: npm run check
+      - name: Formatting
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: TypeScript
+        run: npx next typegen && npm run typecheck
+      - name: OpenAPI contract (Spectral)
+        run: npm run openapi:lint
+      - name: Unit and contract tests
+        run: npm test
+      - name: Production build
+        run: npm run build
       - name: Upload generated OpenAPI contract
         uses: actions/upload-artifact@v7
         if: always()
@@ -31,5 +45,54 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+
+  browser:
+    name: Browser (${{ matrix.browser }})
+    needs: quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    env:
+      STT_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Install browser and system dependencies
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Build isolated production app
+        env:
+          SESSION_SECRET: fictional-ci-build-secret-at-least-32-bytes
+        run: npm run build
+      - name: Browser and accessibility tests
+        run: npm run test:e2e -- --project=mobile-${{ matrix.browser }} --project=desktop-${{ matrix.browser }}
+      - name: Upload synthetic-test failure report
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-${{ matrix.browser }}
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  verify:
+    # Keep the existing required status inclusive of browser failures.
+    name: Verify
+    needs: [quality, browser]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Require quality and both browser engines
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          BROWSER_RESULT: ${{ needs.browser.result }}
+        run: |
+          test "$QUALITY_RESULT" = success
+          test "$BROWSER_RESULT" = success

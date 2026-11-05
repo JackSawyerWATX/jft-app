@@ -1,9 +1,17 @@
 /** UI lifecycle; stopping includes asynchronous finalization. */
 export type TranscriptionState =
-  'unsupported' | 'idle' | 'starting' | 'listening' | 'stopping' | 'error';
+  | 'unsupported'
+  | 'idle'
+  | 'starting'
+  | 'connecting'
+  | 'listening'
+  | 'stopping'
+  | 'error';
 
 /** Engines emit each final segment exactly once; interim text replaces its predecessor. */
 export interface TranscriptionEvents {
+  /** Microphone is granted; transcription transport is still connecting. */
+  connecting?(): void;
   listening(): void;
   /** Optional speech activity cue; this is not an audio level measurement. */
   activity?(speaking: boolean): void;
@@ -20,3 +28,5 @@ export interface TranscriptionEngine {
   stop(): void;
   dispose(): void;
 }
+
+export type TranscriptionEngineFactory = () => TranscriptionEngine;

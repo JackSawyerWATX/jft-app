@@ -1,4 +1,4 @@
-/** Next.js adapter; read contract and handler live in src/shares/server/operations/read-share.ts. */
+/** Next.js adapter; read contract and handler live in src/shares/server/http/operations/read-share.ts. */
 export {
   dispatch as GET,
   dispatch as HEAD,

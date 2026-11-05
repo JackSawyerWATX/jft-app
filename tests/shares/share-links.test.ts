@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readPublicShare } from '../../src/shares/server/public-shares';
-import { InMemoryShareRepository } from '../../src/shares/server/repository';
+import { readPublicShare } from '../../src/shares/server/application/read-public-share';
+import { InMemoryShareRepository } from '../../src/shares/server/storage/repository';
 import { dispatch } from '../../src/shares/server/app';
 import { reflection } from '../../src/shares/reflection/reflection-fixture';
 

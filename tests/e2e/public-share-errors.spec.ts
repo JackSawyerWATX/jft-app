@@ -1,7 +1,20 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { resolve } from 'node:path';
+
+// Only this deliberately failed server-rendered page may emit React's sanitized production error.
+test.use({
+  expectedBrowserErrors: [
+    {
+      kind: 'console',
+      pattern:
+        /An error occurred in the Server Components render|Minified React error #441;/,
+      reason:
+        'The test deliberately fails its isolated repository to exercise the error boundary.'
+    }
+  ]
+});
 
 // A test-only repository fails once in an isolated production process, then lets retry recover.
 test('server failures use a retryable error page and sanitized diagnostics', async ({
@@ -77,6 +90,8 @@ test('server failures use a retryable error page and sanitized diagnostics', asy
     ).toBeVisible();
     expect(await page.context().cookies()).toEqual([]);
   } finally {
+    // Close the client before stopping its server: WebKit reports late stream failures otherwise.
+    await page.close();
     if (server.exitCode === null && server.signalCode === null) {
       const exited = once(server, 'exit');
       server.kill('SIGKILL');

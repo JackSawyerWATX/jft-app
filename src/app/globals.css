@@ -114,6 +114,11 @@ button:disabled {
   background: #f1eee5;
 }
 
+/* Muted history text must retain 4.5:1 contrast on the darker hover background. */
+.share-row:hover {
+  --muted: #536579;
+}
+
 /* Shares and feedback */
 
 .check,

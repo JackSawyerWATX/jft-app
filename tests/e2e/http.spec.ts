@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures/test';
 import SwaggerParser from '@apidevtools/swagger-parser';
 
 // Exercise actual Next.js exports and framework routing, not just app.fetch.

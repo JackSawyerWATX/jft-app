@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { saveShare, ShareApiError } from '../../src/shares/api';
+import { saveShare } from '../../src/shares/api';
+import { ApiRequestError } from '../../src/shares/http-client';
 
 test('the fetch client retains stable error codes/status and does not retry failed saves', async (context) => {
   const calls = context.mock.method(
@@ -18,7 +19,7 @@ test('the fetch client retains stable error codes/status and does not retry fail
       )
   );
   await assert.rejects(saveShare('Fictional text.'), (cause: unknown) => {
-    assert.ok(cause instanceof ShareApiError);
+    assert.ok(cause instanceof ApiRequestError);
     assert.equal(cause.code, 'INVALID_SHARE');
     assert.equal(cause.status, 400);
     assert.equal(cause.message, 'A fictional validation message.');
@@ -34,7 +35,7 @@ test('non-JSON failures retain HTTP status and use a safe fallback without retry
     async () => new Response('<html>Proxy failure</html>', { status: 502 })
   );
   await assert.rejects(saveShare('Fictional text.'), (cause: unknown) => {
-    assert.ok(cause instanceof ShareApiError);
+    assert.ok(cause instanceof ApiRequestError);
     assert.equal(cause.status, 502);
     assert.equal(cause.code, 'INTERNAL_ERROR');
     assert.equal(cause.message, 'Please try again.');

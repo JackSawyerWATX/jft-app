@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const config: NextConfig = {
+  // Quick Tunnel hostnames change on each run; permit their development assets.
+  allowedDevOrigins: ['*.trycloudflare.com'],
   // Bearer URLs must never enter development access logs or browser log forwarding.
   logging: false,
   turbopack: {

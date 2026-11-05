@@ -7,6 +7,7 @@ const buttonLabels: Record<TranscriptionState, string> = {
   idle: 'Record your share',
   error: 'Record your share',
   starting: 'Cancel microphone',
+  connecting: 'Cancel connection',
   listening: 'Stop listening',
   stopping: 'Finishing transcription…'
 };

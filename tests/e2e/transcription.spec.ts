@@ -1,76 +1,14 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from './fixtures/test';
 
-async function mockSpeech(page: Page, prefixed = false) {
-  await page.addInitScript(
-    ({ prefixed }) => {
-      class Speech {
-        onaudiostart?: () => void;
-        onspeechstart?: () => void;
-        onspeechend?: () => void;
-        onstart?: () => void;
-        onend?: () => void;
-        onresult?: (event: unknown) => void;
-        onerror?: (event: unknown) => void;
-        static current: Speech;
-        start() {
-          Speech.current = this;
-        }
-        stop() {
-          /* Tests explicitly emit final results before end. */
-        }
-        abort() {
-          Object.assign(window, { aborted: true });
-        }
-      }
-      Object.assign(window, {
-        SpeechRecognition: prefixed ? undefined : Speech,
-        webkitSpeechRecognition: prefixed ? Speech : undefined,
-        speechStart: () => Speech.current.onstart?.(),
-        speechAudio: () => Speech.current.onaudiostart?.(),
-        speechActivity: (active: boolean) =>
-          active
-            ? Speech.current.onspeechstart?.()
-            : Speech.current.onspeechend?.(),
-        speechEnd: () => Speech.current.onend?.(),
-        speechError: (error: string) => Speech.current.onerror?.({ error }),
-        speechResult: (segments: [string, boolean][]) =>
-          Speech.current.onresult?.({
-            resultIndex: 0,
-            results: segments.map(([transcript, isFinal]) => ({
-              isFinal,
-              0: { transcript }
-            }))
-          }),
-        captureStale: () => {
-          const callback = Speech.current.onresult;
-          Object.assign(window, {
-            stale: () =>
-              callback?.({
-                resultIndex: 0,
-                results: [
-                  { isFinal: true, 0: { transcript: 'Stale fictional text' } }
-                ]
-              })
-          });
-        }
-      });
-    },
-    { prefixed }
-  );
-}
-async function emit(page: Page, name: string, value?: unknown) {
-  await page.evaluate(({ name, value }) => Reflect.get(window, name)(value), {
-    name,
-    value
-  });
-}
+import { mockSpeech, emit } from './fixtures/openai-browser';
 
 test('dictation combines with inline editing, repeated sessions, saving, history and recipient reading', async ({
   page,
   browser,
+  watchPage,
   baseURL
 }) => {
-  await mockSpeech(page, true);
+  await mockSpeech(page);
   await page.goto('/');
   await expect(
     page.getByText('Speak from your own experience', { exact: true })
@@ -80,7 +18,7 @@ test('dictation combines with inline editing, repeated sessions, saving, history
   ).toBeVisible();
   await page.getByRole('textbox').fill('Typed fictional thought.');
   await page.getByRole('button', { name: 'Record your share' }).click();
-  await expect(page.getByText('Waiting for microphone access…')).toBeVisible();
+  await expect(page.getByText('Connecting transcription…')).toBeVisible();
   await emit(page, 'speechStart');
   await emit(page, 'speechResult', [['Provisional fiction', false]]);
   await expect(
@@ -126,9 +64,10 @@ test('dictation combines with inline editing, repeated sessions, saving, history
     .getByRole('button', { name: 'Past shares', exact: true })
     .click();
   await expect(page.getByRole('listitem')).toContainText('Another session.');
-  const recipient = await browser.newContext();
+  const recipient = await browser.newContext({ ignoreHTTPSErrors: true });
   try {
     const reader = await recipient.newPage();
+    watchPage(reader);
     await reader.goto(new URL(saved.shareUrl, baseURL).href);
     await expect(reader.getByLabel('Shared thoughts')).toContainText(
       'Another session.'
@@ -143,15 +82,11 @@ test('permission/service errors recover, navigation cleans up, stale callbacks a
 }) => {
   await mockSpeech(page);
   await page.goto('/');
-  for (const error of ['not-allowed', 'network']) {
+  for (const error of ['network', 'private provider failure']) {
     await page.getByRole('button', { name: 'Record your share' }).click();
     await emit(page, 'speechError', error);
     await expect(
-      page.getByText(
-        error === 'not-allowed'
-          ? /Microphone access was denied/
-          : /Speech recognition could not continue/
-      )
+      page.getByText(/Speech recognition could not continue/)
     ).toBeVisible();
   }
   await page.getByRole('button', { name: 'Record your share' }).click();
@@ -176,8 +111,7 @@ test('permission/service errors recover, navigation cleans up, stale callbacks a
 test('unsupported browsers keep typing and saving', async ({ page }) => {
   await page.addInitScript(() =>
     Object.assign(window, {
-      SpeechRecognition: undefined,
-      webkitSpeechRecognition: undefined
+      RTCPeerConnection: undefined
     })
   );
   await page.goto('/');
@@ -214,15 +148,23 @@ test('dictation limit stops recognition and retains the draft without accepting 
 test('opt-in diagnostics trace recognition without exposing transcripts or raw errors', async ({
   page
 }) => {
-  await mockSpeech(page, true);
+  await mockSpeech(page);
   const logs: string[] = [];
-  page.on('console', async (message) => {
-    if (message.text().startsWith('[Doorknob speech]')) {
-      const details = await Promise.all(
-        message.args().map((arg) => arg.jsonValue())
-      );
-      logs.push(JSON.stringify(details));
-    }
+  // Serialize in the originating page: remote object handles expire during navigation.
+  await page.addInitScript(() => {
+    const info = console.info.bind(console);
+    console.info = (...args: unknown[]) => {
+      if (
+        typeof args[0] === 'string' &&
+        args[0].startsWith('[Doorknob speech]')
+      )
+        info(JSON.stringify(args));
+      else info(...args);
+    };
+  });
+  page.on('console', (message) => {
+    if (message.text().startsWith('["[Doorknob speech]'))
+      logs.push(message.text());
   });
   await page.goto('/?speechDebug=1');
   await page.getByRole('button', { name: 'Record your share' }).click();
@@ -237,16 +179,13 @@ test('opt-in diagnostics trace recognition without exposing transcripts or raw e
     'availability',
     'editor-start',
     'start-requested',
-    'start-returned',
     'recognition-start',
-    'audio-start',
-    'results',
+    'provider-event',
     'final-committed',
     'dispose'
   ])
     expect(all).toContain(event);
-  expect(all).toContain('unknown');
-  expect(all).toContain('prefixed');
+  expect(all).toContain('provider');
   expect(all).not.toContain('Private fictional');
   expect(all).not.toContain('private vendor');
   await page.goto('/');
@@ -407,7 +346,7 @@ test('teleprompter resizes existing text after viewport changes without clipping
   await expect(field).toHaveValue(text);
 });
 
-test('silence stops normally while audio-capture errors suggest checking the microphone', async ({
+test('stop discards provisional text while microphone capture failures retain finalized text', async ({
   page
 }) => {
   await mockSpeech(page);
@@ -418,9 +357,9 @@ test('silence stops normally while audio-capture errors suggest checking the mic
     ['Final fictional sentence.', true],
     ['Unfinished words.', false]
   ]);
-  await emit(page, 'speechError', 'no-speech');
+  await emit(page, 'speechError', 'network');
   await expect(
-    page.getByText('Tap to record more.', { exact: true })
+    page.getByText(/Speech recognition could not continue/)
   ).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveValue(
     'Final fictional sentence.'
@@ -428,15 +367,235 @@ test('silence stops normally while audio-capture errors suggest checking the mic
   await expect(
     page.getByText('Unfinished words.', { exact: true })
   ).toHaveCount(0);
+  await page.evaluate(() =>
+    Reflect.set(window, 'microphoneError', 'NotReadableError')
+  );
   await page.getByRole('button', { name: 'Record your share' }).click();
-  await emit(page, 'speechError', 'audio-capture');
   await expect(
     page.getByText(
-      'Microphone audio is unavailable. Check your microphone and browser settings, then try again.',
+      'Microphone unavailable. Check that a microphone is connected and another app is not using it, then try again.',
       { exact: true }
     )
   ).toBeVisible();
   await expect(page.getByRole('textbox')).toHaveValue(
     'Final fictional sentence.'
   );
+});
+
+test('microphone denial retains typing and stop accepts corrected final words without saving provisional text', async ({
+  page
+}) => {
+  await mockSpeech(page);
+  await page.goto('/');
+  await page.getByRole('textbox').fill('Typed fictional words.');
+  await page.evaluate(() =>
+    Reflect.set(window, 'microphoneError', 'NotAllowedError')
+  );
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  await expect(page.getByText(/Microphone access was denied/)).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveValue('Typed fictional words.');
+  await page.evaluate(() => Reflect.set(window, 'microphoneError', ''));
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  await emit(page, 'speechStart');
+  await emit(page, 'speechResult', [['uncorrected provisional', false]]);
+  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Save privately' })
+  ).toBeDisabled();
+  expect(await page.evaluate(() => Reflect.get(window, 'aborted'))).toBe(true);
+  await emit(page, 'speechResult', [['Corrected, punctuated final.', true]]);
+  await emit(page, 'speechEnd');
+  await expect(page.getByRole('textbox')).toHaveValue(
+    'Typed fictional words.\n\nCorrected, punctuated final.'
+  );
+  await expect(
+    page.getByText('uncorrected provisional', { exact: true })
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('textbox')).toHaveValue('');
+});
+
+test('backgrounding releases the microphone and retains finalized text', async ({
+  page
+}) => {
+  await mockSpeech(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  await emit(page, 'speechStart');
+  await emit(page, 'speechResult', [
+    ['Final fictional words.', true],
+    ['Provisional words.', false]
+  ]);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden'
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.getByText(/Recording was interrupted/)).toBeVisible();
+  await expect(page.getByRole('textbox')).toHaveValue('Final fictional words.');
+  expect(await page.evaluate(() => Reflect.get(window, 'aborted'))).toBe(true);
+  await expect(
+    page.getByText('Provisional words.', { exact: true })
+  ).toHaveCount(0);
+  await page.evaluate(() =>
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'visible'
+    })
+  );
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  await emit(page, 'speechStart');
+  await page.getByRole('button', { name: 'Stop listening' }).click();
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      value: 'hidden'
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(page.getByText(/Recording was interrupted/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Record your share' })
+  ).toBeEnabled();
+});
+
+test('unconfigured real credential endpoint releases capture and preserves typed saving', async ({
+  page
+}) => {
+  await mockSpeech(page);
+  await page.unroute('**/api/transcription/session');
+  await page.goto('/');
+  await page
+    .getByRole('textbox')
+    .fill('Fictional typed fallback without provider access.');
+  await expect(
+    page.getByRole('button', { name: 'Save privately' })
+  ).toBeEnabled();
+  const denied = page.waitForResponse((response) =>
+    response.url().endsWith('/api/transcription/session')
+  );
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  expect((await denied).status()).toBe(503);
+  await expect(
+    page.getByText(
+      'Transcription is unavailable. You can still type and save your share.',
+      { exact: true }
+    )
+  ).toBeVisible();
+  expect(await page.evaluate(() => Reflect.get(window, 'aborted'))).toBe(true);
+  await page.getByRole('button', { name: 'Save privately' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Your share is saved.' })
+  ).toBeVisible();
+});
+
+for (const action of ['cancel', 'hide', 'navigate'] as const) {
+  test(`pending microphone permission after ${action} releases a late grant without starting transport`, async ({
+    page
+  }) => {
+    await mockSpeech(page);
+    await page.goto('/');
+    await page.getByRole('textbox').fill('Existing fictional words.');
+    await page.evaluate(() => Reflect.set(window, 'permissionPending', true));
+    await page.getByRole('button', { name: 'Record your share' }).click();
+    expect(
+      await page.evaluate(() => Reflect.get(window, 'microphoneRequests'))
+    ).toBe(1);
+    if (action === 'cancel')
+      await page.getByRole('button', { name: 'Cancel microphone' }).click();
+    else if (action === 'navigate')
+      await page
+        .getByRole('banner')
+        .getByRole('button', { name: 'Past shares' })
+        .click();
+    else
+      await page.evaluate(() => {
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          value: 'hidden'
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+    await page.evaluate(() => Reflect.get(window, 'grantMicrophone')());
+    await expect
+      .poll(() => page.evaluate(() => Reflect.get(window, 'aborted')))
+      .toBe(true);
+    expect(
+      await page.evaluate(() => Reflect.get(window, 'speechReady'))
+    ).toBeUndefined();
+    if (action === 'navigate')
+      await page
+        .getByRole('banner')
+        .getByRole('button', { name: 'Today’s reflection' })
+        .click();
+    await expect(page.getByRole('textbox')).toHaveValue(
+      'Existing fictional words.'
+    );
+  });
+}
+
+test('permission granted shows cancellable connection progress, without claiming to listen before the transport opens', async ({
+  page
+}) => {
+  await mockSpeech(page);
+  let release!: () => void,
+    completed = false;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/transcription/session', async (route) => {
+    await pending;
+    try {
+      await route.fulfill({
+        json: { value: 'ephemeral-fiction', expires_at: 123 }
+      });
+    } catch {
+      /* The canceled startup is allowed to abort this request. */
+    }
+    completed = true;
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Record your share' }).click();
+  await expect(
+    page.getByText('Connecting transcription…', { exact: true })
+  ).toBeVisible();
+  await expect(page.getByText('Listening...', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Listening time')).toHaveText('00:00');
+  await page.getByRole('button', { name: 'Cancel connection' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Record your share' })
+  ).toBeEnabled();
+  expect(await page.evaluate(() => Reflect.get(window, 'aborted'))).toBe(true);
+  release();
+  await expect.poll(() => completed).toBe(true);
+  await expect(page.getByText('Listening...', { exact: true })).toHaveCount(0);
+});
+
+test('recording waits for private-session bootstrap before a parallel credential request can start', async ({
+  page
+}) => {
+  await mockSpeech(page);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/shares', async (route) => {
+    if (route.request().method() === 'GET') {
+      await pending;
+      await route.fulfill({ json: [] });
+    } else await route.continue();
+  });
+  await page.goto('/');
+  await expect(
+    page.getByRole('button', { name: 'Record your share' })
+  ).toBeDisabled();
+  expect(
+    await page.evaluate(() => Reflect.get(window, 'microphoneRequests'))
+  ).toBeUndefined();
+  release();
+  await expect(
+    page.getByRole('button', { name: 'Record your share' })
+  ).toBeEnabled();
 });

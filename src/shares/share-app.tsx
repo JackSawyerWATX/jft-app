@@ -1,22 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import type { Share } from './model';
-import { readShare, saveShare } from './api';
+import { useEffect, useRef } from 'react';
+import { useShareApplication } from './use-share-application';
 import { ShareForm } from './composer/share-form';
 import { ShareHistory } from './history/share-history';
-import { useShareHistory } from './history/use-share-history';
-import { ShareDetail } from './detail/share-detail';
+import { SavedShareScreen } from './detail/saved-share-screen';
 import { ReflectionReading } from './reflection/reflection-reading';
 import { AppHeader } from '../components/app-header';
 import { AppFooter } from '../components/app-footer';
-
-type Screen =
-  { view: 'today' | 'past' } | { view: 'saved' | 'detail'; share: Share };
-type DetailState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'failed'; message: string };
 
 const screenCopy = {
   today: {
@@ -39,84 +30,30 @@ const screenCopy = {
 
 /** Drafts live only in this mounted app; a fresh page starts a fresh share. */
 export function ShareApp() {
-  const [screen, setScreen] = useState<Screen>({ view: 'today' });
+  const {
+    screen,
+    text,
+    cleanup,
+    history,
+    sessionReady,
+    loadHistory,
+    saveError,
+    saving,
+    detailState,
+    navigate,
+    openShare,
+    save
+  } = useShareApplication();
   const { view } = screen;
-  const [text, setText] = useState('');
-  const { history, sessionReady, refresh: loadHistory } = useShareHistory();
-  const [saveError, setSaveError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const savePending = useRef(false);
-  const detailRequest = useRef(0);
-  const [detailState, setDetailState] = useState<DetailState>({
-    status: 'idle'
-  });
   const heading = useRef<HTMLHeadingElement>(null);
   const navigated = useRef(false);
-
   useEffect(() => {
-    // Remove drafts left by older versions; never restore or persist share text.
-    try {
-      window.sessionStorage.removeItem('doorknob:share-draft');
-    } catch {
-      /* Storage is optional. */
+    if (navigated.current) {
+      heading.current?.focus();
+      window.scrollTo({ top: 0 });
     }
-  }, []);
-
-  useEffect(
-    () => () => {
-      detailRequest.current++;
-    },
-    []
-  );
-  useEffect(() => {
-    if (navigated.current) heading.current?.focus();
     navigated.current = true;
-  }, [view]);
-  function navigate(next: Screen) {
-    detailRequest.current++;
-    setDetailState({ status: 'idle' });
-    setScreen(next);
-    if (next.view === 'past' && sessionReady) void loadHistory();
-    window.scrollTo({ top: 0 });
-  }
-  async function openShare(id: string) {
-    const requestId = ++detailRequest.current;
-    setDetailState({ status: 'loading' });
-    try {
-      const share = await readShare(id);
-      if (requestId === detailRequest.current)
-        navigate({ view: 'detail', share });
-    } catch {
-      if (requestId === detailRequest.current)
-        setDetailState({
-          status: 'failed',
-          message: 'This share could not be opened. Please try again.'
-        });
-    }
-  }
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (savePending.current || !sessionReady) return;
-    if (!text.trim()) {
-      setSaveError('Write a few words before saving your share.');
-      return;
-    }
-    savePending.current = true;
-    setSaving(true);
-    setSaveError('');
-    try {
-      const share = await saveShare(text);
-      setText('');
-      navigate({ view: 'saved', share });
-    } catch (cause) {
-      setSaveError(
-        `Your share could not be saved. Your words are still here. ${cause instanceof Error ? cause.message : 'Check your connection and try again.'}`
-      );
-    } finally {
-      savePending.current = false;
-      setSaving(false);
-    }
-  }
+  }, [screen]);
   const { title, description } = screenCopy[view];
   const navigationView =
     view === 'past' || view === 'detail' ? 'today' : 'past';
@@ -185,10 +122,13 @@ export function ShareApp() {
         {view === 'today' && (
           <ShareForm
             text={text}
-            disabled={saving || !sessionReady}
+            sessionReady={sessionReady}
             saving={saving}
             error={saveError}
-            onTextChange={setText}
+            onTextChange={cleanup.edit}
+            cleanupStatus={cleanup.state.status}
+            isCleanupPending={cleanup.isPending}
+            onCleanup={cleanup.run}
             onSave={save}
           />
         )}
@@ -218,23 +158,13 @@ export function ShareApp() {
           </button>
         )}
         {(screen.view === 'saved' || screen.view === 'detail') && (
-          <>
-            <ShareDetail share={screen.share} />
-            <button
-              className="secondary mt-7 w-full"
-              onClick={() => navigate({ view: 'today' })}
-            >
-              Today&apos;s reflection
-            </button>
-            <button
-              className="secondary mt-3 w-full"
-              onClick={() => navigate({ view: 'past' })}
-            >
-              Past shares
-            </button>
-          </>
+          <SavedShareScreen
+            share={screen.share}
+            onWrite={() => navigate({ view: 'today' })}
+            onHistory={() => navigate({ view: 'past' })}
+          />
         )}
-        <AppFooter />
+        {view !== 'saved' && view !== 'detail' && <AppFooter />}
       </main>
     </div>
   );

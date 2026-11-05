@@ -22,7 +22,7 @@ Use these terms consistently across `jft-app` and `jft-harness`. App-specific se
 
 ## App data lifecycle
 
-1. Writing updates React state only. Legacy browser-stored drafts are removed on page load. The app sends the draft to the same-origin BFF when the person chooses **Save privately**.
+1. Writing updates React state only. Legacy browser-stored drafts are removed on page load. After successful explicit recording Stop, the finalized draft is sent through the same-origin BFF to OpenAI for paragraph/filler cleanup without storing a share. **Save privately** separately sends the reviewed text to the BFF for storage.
 2. The server validates the input and signed session, attaches metadata/current reading, and stores an owner-associated record in process memory. A lost response can make the client uncertain whether a write occurred; see [failed-write semantics](API.md#retention-and-failed-write-semantics).
 3. The server returns a share without an `ownerId` field. History/detail requests send the cookie, check ownership, and return that owner's records to browser memory for display. Saving does not send the share to another person. Save-time UUID links allow anyone holding one to fetch only that reading snapshot and text; no harness or model provider is involved.
 4. Access loss and deletion are different events:
@@ -47,6 +47,14 @@ There is no per-share delete endpoint, backup, disk storage, encryption at rest,
 
 [API reference](API.md) owns HTTP/cookie usage and failure semantics. [Architecture](ARCHITECTURE.md) owns the server/client boundaries. The harness's provider and trace behavior remains documented in its own README; this glossary does not establish a shared retention system.
 
-## Speech input data
+## Speech data
 
-Browser-managed speech recognition may send microphone audio to a browser vendor or recognition service; local/offline processing is not guaranteed. Doorknob itself does not record, upload, or store audio. Provisional recognition text exists only in component memory and is discarded when recognition ends. Final segments become ordinary editable draft text and remain only in React memory until explicitly saved; refresh discards the unsaved draft. Only Save privately sends that text to the BFF; saved dictated shares have the same text model, retention, owner history, and sharing-link behavior as typed shares. Navigation/unmount aborts recognition; no background recording or automatic saving is provided.
+- **Live audio**: microphone audio captured only after an explicit Record action and streamed directly to OpenAI over WebRTC. No raw audio files, playback, browser audio storage, or BFF audio persistence are added. Browser/OS/network/provider processing still occurs.
+- **Provisional transcript**: transient provider deltas displayed in the teleprompter; corrections replace them. They are never included in the draft or save request, and are discarded on end/error/refresh.
+- **Final transcript**: the authoritative completed audio segment, appended once to React draft state in audio order. It becomes a share only through explicit saving. Finalized draft text survives recording errors and in-app navigation; refresh discards unsaved words.
+- **Provider retention**: separate from Doorknob storage. OpenAI API content is not used for training by default unless opted in. Standard abuse-monitoring logs may retain customer content for up to 30 days, subject to documented exceptions; Realtime documents no application-state retention. Approved account-level retention controls are not enabled or guaranteed by this app. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+- **Ephemeral credential**: an in-memory browser bearer credential obtained from the BFF after Record. Its 60-second connection-creation expiry does not stop existing sessions or prevent reuse before expiry. Never log/cache it or treat its initial configuration as a strict spending boundary.
+
+## Cleanup data
+
+After explicit Stop successfully finalizes new words, the whole finalized draft is sent through the BFF to OpenAI Responses for light copyediting. The current draft is held in React memory only; successful cleanup replaces it, and failure preserves the original. Pending cleanup is canceled by editing/navigation/unmount and cannot overwrite newer words. Refresh discards the unsaved draft. No provisional text, raw audio or saved share is sent by cleanup, and no repository write occurs. Only explicit Save stores the reviewed draft. Responses uses `store:false` rather than requesting a stored Response; standard provider abuse-monitoring retention still applies. AI may change meaning, so review before saving.

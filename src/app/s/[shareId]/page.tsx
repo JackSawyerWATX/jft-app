@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ThoughtsText } from '../../../shares/detail/thoughts-text';
-import { readPublicShare } from '../../../shares/server/public-shares';
+import { readPublicShare } from '../../../shares/server/application/read-public-share';
 import { readingDateLabel } from '../../../shares/dates';
 
 export const runtime = 'nodejs';
