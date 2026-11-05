@@ -46,7 +46,7 @@ A sharing URL is created at save time; anyone holding it can view the share whil
 3. Open the link in a fresh private browser B. Confirm the original reading and written thoughts appear without a login or session cookie.
 4. In B, the home page's **Past shares** is empty and the sender's private detail returns 404.
 5. In A, open the entry from **Past shares** and tap its icon; it uses the same URL without requesting a new link.
-6. Tamper with a URL parameter and confirm the recipient page says **This share is unavailable**. Restart the server and confirm its in-memory shares are gone.
+6. Tamper with a URL parameter and confirm the recipient page says **This share is unavailable**. Restart the server and confirm memory-mode shares are gone; DynamoDB-mode shares remain available until expiry.
 
 ## Writing and reviewing shares
 
@@ -60,11 +60,13 @@ The reading and April 23, 2025 date remain deliberate placeholders.
 
 ## Persistence and privacy limitations
 
-Shares are sent to the same-origin Next.js server and stored in a process-local Map. Each record has a server-generated UUID, ISO timestamp, `kind: 'text'`, text, reading snapshot, and anonymous owner ID in the server record. Share JSON omits the ownerId field. There is no browser storage persistence or migration of v0.1 test data.
+Shares expire seven days after creation, for private history/details and public links alike. The default local store is a process-local Map; restarting loses its contents. For deployed environments, explicitly select DynamoDB using `SHARE_PERSISTENCE=dynamodb`, `DYNAMODB_TABLE_NAME`, and `DYNAMODB_REGION`. The SDK uses the assigned compute role, without embedded AWS keys. See the [Terraform and Amplify deployment guide](infra/terraform/README.md) for infrastructure, state bootstrap, configuration, costs, and rollout checks. Nothing is deployed automatically.
 
-A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It expires after 30 days and is Secure in production. Different browser sessions cannot list or read one another's shares through the private endpoints; a shared UUID link separately grants read access to that share. Missing, invalid or expired cookies automatically start a fresh empty anonymous session. This is disposable prototype behavior: old ownership is never restored from invalid credentials, and previous records may remain in server memory but are inaccessible to the new owner. The signed cookie is readable, not encrypted, and must be treated as a bearer credential. Tabs sharing site cookies share an owner; use separate profiles/cookie jars to test isolation. Cookies do not provide login accounts or recovery. Saving waits for a successful initial session read; initialization failures retain the draft and offer retry. Foreign-origin POSTs are rejected before session creation and never replace the cookie. This prototype now uses Hono’s signed-cookie format; old-format cookies automatically start a fresh empty session. There is no cookie migration.
+Each saved record contains a server-generated UUID, timestamp, text, reading snapshot, anonymous owner ID, and server-only Unix-second `expiresAt`. Owner and expiry fields are omitted from API responses. DynamoDB persistence survives server replacement and supports multiple instances. Its owner index is eventually consistent, so a newly saved share may take a moment to appear in history. The original reading stays attached even if the source changes.
 
-**This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts live only in React memory. Refreshing, closing the tab, or leaving the mounted app starts a fresh share. In-app Today/Past shares navigation and failed saves retain the current draft until refresh or a successful save. Older stored drafts are discarded on page load. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
+A signed HttpOnly, SameSite=Lax cookie identifies the anonymous session, with a 30-day lifetime and Secure in production. All private reads enforce ownership. Cookies provide neither login accounts nor recovery. Losing the cookie or changing `SESSION_SECRET` loses private access; it does not delete the underlying records or revoke public links. Keep a stable production signing secret. Foreign-origin POSTs are rejected before session creation. Share IDs and cookies are bearer credentials and must never be logged.
+
+DynamoDB TTL eventually deletes expired shares, potentially days after their reads become unavailable. The local Map prunes expired records during repository operations. No manual delete endpoint, audio recording storage, backup, or permanent journal is added. Unsaved drafts live only in React memory and are discarded on refresh or leaving the mounted app; in-app navigation and failed saves retain the draft. Recipient copies and external provider retention are separate. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
 Signed sharing links are optional: saving prepares a URL but never sends it automatically. No raw audio storage, registration, real reading feeds, or harness integration are included. Optional live transcription sends microphone audio to OpenAI only during explicitly started sessions.
 
@@ -92,7 +94,7 @@ Manual checks:
 3. Open a separate private browser session and confirm its history is empty and the first session's share ID returns 404.
 4. Simulate a failed POST in browser developer tools; verify the draft remains with no confirmation.
 5. Check phone and desktop layouts, keyboard navigation, and heading focus.
-6. Restart the server and confirm history is empty. Clear cookies and confirm previous shares are inaccessible.
+6. In memory mode, restart the server and confirm history is empty. In DynamoDB mode, confirm unexpired shares survive with the same signing key/cookie. Clear cookies and confirm previous shares are inaccessible privately.
 
 ## Project layout
 

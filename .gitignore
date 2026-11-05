@@ -7,3 +7,14 @@ playwright-report/
 test-results/
 
 .tmp/
+
+# Terraform credentials/state/plans must never enter Git. Commit provider locks.
+**/.terraform/
+**/.terraform-*/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.s3.tfbackend
+*.local.tfvars
+crash.log
+crash.*.log

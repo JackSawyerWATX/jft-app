@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server --import tsx --test --test-isolation=none tests/shares/*.test.ts tests/shares/transcription/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/transcription/client/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/cleanup/client/*.test.ts && node --import tsx --test tests/quality/*.test.ts",
+    "test": "node --conditions=react-server --import ./tests/fixtures/local-persistence.mjs --import tsx --test --test-isolation=none tests/shares/*.test.ts tests/shares/transcription/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/transcription/client/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/cleanup/client/*.test.ts && node --import tsx --test tests/quality/*.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run openapi:lint && npm test && npm run build",
@@ -17,7 +17,9 @@
     "openapi:lint": "npm run openapi:generate && spectral lint .tmp/openapi.yaml --ruleset .spectral.yaml --fail-severity warn"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1162.0",
     "@aws-sdk/client-secrets-manager": "^3.1160.0",
+    "@aws-sdk/lib-dynamodb": "^3.1162.0",
     "@hono/zod-openapi": "^1.6.3",
     "content-type": "^3.1.1",
     "hono": "^4.13.14",

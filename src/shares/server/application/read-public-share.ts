@@ -2,6 +2,7 @@ import 'server-only';
 import { publicShareSchema } from '../../model';
 import { shareRepository, type ShareRepository } from '../storage/repository';
 import { z } from 'zod';
+import { isShareActive } from '../storage/create-stored-share';
 
 const shareId = z.uuid({ version: 'v4' });
 
@@ -18,7 +19,7 @@ export async function readPublicShare(
 ) {
   if (!shareId.safeParse(id).success) return null;
   const stored = await repository.findById(id);
-  if (!stored) return null;
+  if (!stored || !isShareActive(stored, now)) return null;
   const age = now - Date.parse(stored.createdAt);
   if (!Number.isFinite(age) || age < 0 || age >= lifetimeMs) return null;
   return publicShareSchema.parse(stored);

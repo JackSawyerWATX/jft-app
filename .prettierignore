@@ -9,3 +9,9 @@ playwright-report/
 test-results/
 
 .tmp/
+
+**/.terraform/
+**/.terraform-*/
+*.tfstate
+*.tfstate.*
+*.tfplan
