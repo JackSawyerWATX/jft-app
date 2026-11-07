@@ -10,7 +10,6 @@ import {
 import { z } from 'zod';
 import {
   createStoredShare,
-  isShareActive,
   storedShareSchema,
   type StoredShare
 } from './create-stored-share';
@@ -18,7 +17,6 @@ import type { ShareRepository } from './repository';
 
 export const OWNER_INDEX_NAME = 'owner-created-at';
 
-/** Only imported from the server storage layer; default AWS credentials, no keys. */
 export class DynamoDbShareRepository implements ShareRepository {
   constructor(
     private readonly tableName: string,
@@ -26,9 +24,7 @@ export class DynamoDbShareRepository implements ShareRepository {
   ) {}
 
   static forRegion(tableName: string, region: string) {
-    const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region }), {
-      marshallOptions: { removeUndefinedValues: true }
-    });
+    const client = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
     return new DynamoDbShareRepository(tableName, client);
   }
 
@@ -38,65 +34,62 @@ export class DynamoDbShareRepository implements ShareRepository {
       new PutCommand({
         TableName: this.tableName,
         Item: share,
+        // A new share must never overwrite an existing share with the same ID.
         ConditionExpression: 'attribute_not_exists(id)'
       })
     );
-    return structuredClone(share);
+    return share;
   }
 
   async findById(id: string): Promise<StoredShare | null> {
     if (!z.uuid({ version: 'v4' }).safeParse(id).success) return null;
-    const response = await this.client.send(
+
+    const { Item } = await this.client.send(
       new GetCommand({
         TableName: this.tableName,
         Key: { id },
         ConsistentRead: true
       })
     );
-    if (!response.Item) return null;
-    const share = storedShareSchema.parse(response.Item);
-    return share.id === id && isShareActive(share)
-      ? structuredClone(share)
-      : null;
+// DynamoDB deletes expired items asynchronously, so an expired share may still exist.
+    if (!Item) return null;
+    const share = storedShareSchema.parse(Item);
+    return share.expiresAt > Math.floor(Date.now() / 1000) ? share : null;
   }
 
   async findByOwner(id: string, ownerId: string): Promise<StoredShare | null> {
     const share = await this.findById(id);
+    // A share ID identifies the record; private access still requires the owning session.
     return share?.ownerId === ownerId ? share : null;
   }
 
   async listByOwner(ownerId: string): Promise<StoredShare[]> {
-    z.uuid().parse(ownerId);
     const shares: StoredShare[] = [];
+    const now = Math.floor(Date.now() / 1000);
     let cursor: QueryCommandInput['ExclusiveStartKey'];
-    const now = Date.now();
+
     do {
-      const response = await this.client.send(
+      const { Items, LastEvaluatedKey } = await this.client.send(
         new QueryCommand({
           TableName: this.tableName,
           IndexName: OWNER_INDEX_NAME,
           KeyConditionExpression: 'ownerId = :owner',
+          // Hide expired shares from history while DynamoDB waits to delete them.
           FilterExpression: 'expiresAt > :now',
-          ExpressionAttributeValues: {
-            ':owner': ownerId,
-            ':now': Math.floor(now / 1000)
-          },
+          ExpressionAttributeValues: { ':owner': ownerId, ':now': now },
           ScanIndexForward: false,
           ExclusiveStartKey: cursor
         })
       );
-      for (const item of response.Items ?? []) {
-        const share = storedShareSchema.parse(item);
-        // Defense in depth: never trust the query result alone for authorization/TTL.
-        if (share.ownerId === ownerId && isShareActive(share))
-          shares.push(share);
+
+      for (const item of Items ?? []) {
+        shares.push(storedShareSchema.parse(item));
       }
-      cursor = response.LastEvaluatedKey;
+
+      // A filtered page can be empty even when more results exist.
+      cursor = LastEvaluatedKey;
     } while (cursor && Object.keys(cursor).length > 0);
-    return structuredClone(
-      shares
-        .filter((share) => isShareActive(share))
-        .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    );
+
+    return shares;
   }
 }
