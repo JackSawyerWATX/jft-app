@@ -15,7 +15,6 @@ export type StoredShare = z.infer<typeof storedShareSchema>;
 /** Construct a validated reading snapshot and metadata without writing to storage. */
 export function createStoredShare(ownerId: string, text: string): StoredShare {
   const input = createShareSchema.parse({ text });
-  z.uuid().parse(ownerId);
   const id = randomUUID();
   const now = Date.now();
   return storedShareSchema.parse({
@@ -30,13 +29,7 @@ export function createStoredShare(ownerId: string, text: string): StoredShare {
   });
 }
 
-/** TTL has second precision. Never expose future-dated or expired records. */
+/** The server-created Unix-second deadline is authoritative for every store. */
 export function isShareActive(share: StoredShare, now = Date.now()): boolean {
-  const created = Date.parse(share.createdAt);
-  return (
-    Number.isFinite(now) &&
-    created <= now &&
-    now < share.expiresAt * 1000 &&
-    now < created + SHARE_LIFETIME_SECONDS * 1000
-  );
+  return Number.isFinite(now) && now < share.expiresAt * 1000;
 }

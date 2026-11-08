@@ -66,23 +66,10 @@ const processState = globalThis as typeof globalThis & {
 };
 
 const persistenceMode = z.enum(['memory', 'dynamodb']).default('memory');
-const regionCharacters = 'abcdefghijklmnopqrstuvwxyz0123456789-';
-const tableCharacters = `${regionCharacters}ABCDEFGHIJKLMNOPQRSTUVWXYZ_.`;
-const usesOnly = (allowed: string) => (value: string) =>
-  [...value].every((character) => allowed.includes(character));
 
 const dynamoConfig = z.object({
-  DYNAMODB_TABLE_NAME: z
-    .string()
-    .trim()
-    .min(3)
-    .max(255)
-    .refine(usesOnly(tableCharacters), 'Use a valid DynamoDB table name.'),
-  DYNAMODB_REGION: z
-    .string()
-    .trim()
-    .min(1)
-    .refine(usesOnly(regionCharacters), 'Use a valid AWS region.')
+  DYNAMODB_TABLE_NAME: z.string().trim().min(3).max(255),
+  DYNAMODB_REGION: z.string().trim().min(1)
 });
 
 export function createShareRepository(

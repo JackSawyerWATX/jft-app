@@ -10,6 +10,7 @@ import {
 import { z } from 'zod';
 import {
   createStoredShare,
+  isShareActive,
   storedShareSchema,
   type StoredShare
 } from './create-stored-share';
@@ -51,10 +52,10 @@ export class DynamoDbShareRepository implements ShareRepository {
         ConsistentRead: true
       })
     );
-// DynamoDB deletes expired items asynchronously, so an expired share may still exist.
+    // DynamoDB deletes expired items asynchronously, so check the authoritative deadline.
     if (!Item) return null;
     const share = storedShareSchema.parse(Item);
-    return share.expiresAt > Math.floor(Date.now() / 1000) ? share : null;
+    return isShareActive(share) ? share : null;
   }
 
   async findByOwner(id: string, ownerId: string): Promise<StoredShare | null> {

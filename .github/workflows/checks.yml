@@ -81,10 +81,31 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  dynamodb:
+    name: DynamoDB Local integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      dynamodb:
+        image: amazon/dynamodb-local:2.5.4
+        ports:
+          - 8000:8000
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: DynamoDB Local repository tests
+        run: npm run test:dynamodb
+        env:
+          DYNAMODB_LOCAL_ENDPOINT: http://localhost:8000
+
   verify:
     # Keep the existing required status inclusive of browser failures.
     name: Verify
-    needs: [quality, browser]
+    needs: [quality, browser, dynamodb]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 2
@@ -93,6 +114,8 @@ jobs:
         env:
           QUALITY_RESULT: ${{ needs.quality.result }}
           BROWSER_RESULT: ${{ needs.browser.result }}
+          DYNAMODB_RESULT: ${{ needs.dynamodb.result }}
         run: |
           test "$QUALITY_RESULT" = success
           test "$BROWSER_RESULT" = success
+          test "$DYNAMODB_RESULT" = success
