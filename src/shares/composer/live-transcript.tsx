@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 
 // Within roughly one line of the bottom, new words resume automatic following.
 const FOLLOW_THRESHOLD_PX = 32;
+const noSubscription = () => () => {};
 
 type LiveTranscriptProps = {
   text: string;
@@ -20,6 +21,12 @@ export function LiveTranscript({
   readOnly,
   errorId
 }: LiveTranscriptProps) {
+  // React keeps the server snapshot until hydration has attached input handlers.
+  const hydrated = useSyncExternalStore(
+    noSubscription,
+    () => true,
+    () => false
+  );
   const viewport = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const followNewWords = useCallback(() => {
@@ -49,7 +56,7 @@ export function LiveTranscript({
           aria-label="Your share"
           aria-describedby={errorId}
           value={text}
-          readOnly={readOnly}
+          readOnly={readOnly || !hydrated}
           onChange={(event) => onTextChange(event.target.value)}
           className="transcript-input"
           placeholder="Speak to begin..."

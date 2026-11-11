@@ -70,8 +70,14 @@ jobs:
         env:
           SESSION_SECRET: fictional-ci-build-secret-at-least-32-bytes
         run: npm run build
-      - name: Browser and accessibility tests
+      - name: OpenAI browser and accessibility contracts
+        env:
+          STT_PROVIDER: openai
         run: npm run test:e2e -- --project=mobile-${{ matrix.browser }} --project=desktop-${{ matrix.browser }}
+      - name: Soniox browser contract (synthetic provider)
+        env:
+          STT_PROVIDER: soniox
+        run: npm run test:e2e -- tests/e2e/soniox.spec.ts --project=mobile-${{ matrix.browser }} --project=desktop-${{ matrix.browser }}
       - name: Upload synthetic-test failure report
         uses: actions/upload-artifact@v7
         if: failure()

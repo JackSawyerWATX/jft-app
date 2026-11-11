@@ -96,3 +96,38 @@ test('typing and saving work when browser storage is unavailable', async ({
     page.getByRole('heading', { name: 'Your share is saved.' })
   ).toBeVisible();
 });
+
+test('the editor waits for hydration before accepting input and retains the first typed words', async ({
+  page
+}) => {
+  let hydrate!: () => void;
+  const hydration = new Promise<void>((resolve) => {
+    hydrate = resolve;
+  });
+  await page.route('**/_next/static/**/*.js', async (route) => {
+    await hydration;
+    await route.continue();
+  });
+  try {
+    await page.goto('/', { waitUntil: 'commit' });
+    const editor = page.getByRole('textbox');
+    await expect(editor).toBeVisible();
+    await expect(editor).not.toBeEditable();
+    hydrate();
+    await editor.fill('Fictional words typed as soon as the editor is ready.');
+    await expect(
+      page.getByRole('button', { name: 'Save privately' })
+    ).toBeEnabled();
+    await page
+      .getByRole('banner')
+      .getByRole('button', { name: 'Past shares', exact: true })
+      .click();
+    await page.getByRole('button', { name: 'Write your first share' }).click();
+    await expect(page.getByRole('textbox')).toHaveValue(
+      'Fictional words typed as soon as the editor is ready.'
+    );
+  } finally {
+    hydrate();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+});

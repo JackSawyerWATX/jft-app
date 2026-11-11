@@ -6,7 +6,7 @@ Use these terms consistently across `jft-app` and `jft-harness`. App-specific se
 | -------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Reflection / reading | The prompt a person responds to; saved shares retain the associated snapshot                                  | App: fictional hardcoded source copy, rendered by the UI and copied into each server record                                                                    |
 | Draft                | A person's unsaved response                                                                                   | App: React memory only; retained across in-app screens and failed saves; discarded on refresh, leaving the mounted app, or a confirmed save                    |
-| Share                | A saved response and its original reading snapshot; saving does not mean sending it to another person         | App: sent to the BFF and stored in memory or explicitly selected DynamoDB; inaccessible after seven days, then pruned locally or eventually deleted by TTL     |
+| Share                | A saved response and its original reading snapshot; saving does not mean sending it to another person         | App: sent to the BFF and stored in memory or explicitly selected DynamoDB; retained without automatic deletion; public links expire after seven days           |
 | Anonymous session    | A server-generated owner identity authenticated by a signed cookie, without an account                        | App: shared by requests/tabs with the same site cookie jar; expires after an absolute 30 days                                                                  |
 | Session cookie       | Bearer credential containing the owner UUID, expiry, and HMAC signature                                       | Browser cookie storage, HttpOnly/SameSite=Lax and Secure in production; sent to the same host; not encrypted, not share content, and never committed or logged |
 | Owner ID             | UUID used to associate a private share with a verified anonymous session                                      | Server record and signed cookie payload; omitted as a field from share JSON; knowing an ID alone does not authorize a request                                  |
@@ -18,7 +18,7 @@ Use these terms consistently across `jft-app` and `jft-harness`. App-specific se
 ## Public sharing terms
 
 - **Sharing link**: a URL containing only the server-generated, cryptographically random UUIDv4, `/s/{id}`. The UUID is a bearer credential: anyone who learns it can read that share's original reading and text for seven days from its stored creation time. It does not authorize owner history. The server prepares one URL while saving and keeps it in the same stored share record; there are no separate signatures, sharing secrets, token records, or recipient tracking.
-- **Expiration**: rejects every read path after seven days from saving (Unix-second precision). DynamoDB TTL later deletes the record; memory prunes it during repository operations. Neither erases a recipient's copy. No immediate individual-link revocation exists.
+- **Retention**: Private records have no automatic deletion deadline. Public-link expiration does not remove records or revoke private access. Memory is cleared on restart; DynamoDB survives restarts. Cookie loss does not delete records. No account recovery, manual deletion, or backup is provided.
 
 ## App data lifecycle
 
@@ -27,15 +27,15 @@ Use these terms consistently across `jft-app` and `jft-harness`. App-specific se
 3. The server returns a share without an `ownerId` field. History/detail requests send the cookie, check ownership, and return that owner's records to browser memory for display. Saving does not send the share to another person. Save-time UUID links allow anyone holding one to fetch only that reading snapshot and text; no harness or model provider is involved.
 4. Access loss and deletion are different events:
 
-| Event                                               | Effect on access                                          | Effect on data                                                                  |
-| --------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Refresh or tab close                                | The valid cookie still permits unexpired share reads      | Draft clears; saved shares remain                                               |
-| Clear cookies, cookie expiry, or signing-key change | A new anonymous owner cannot recover private history      | Records remain until expiry/deletion; public links still work until expiry      |
-| Seven days from creation                            | Private details/history and public links refuse the share | Memory prunes during operations; DynamoDB TTL eventually deletes asynchronously |
-| Restart the server                                  | The stable signing key/cookie still identifies the owner  | Memory shares are lost; unexpired DynamoDB shares remain                        |
-| Route to another replica                            | Same verified cookie/owner checks                         | Memory Maps are isolated; DynamoDB shares are shared                            |
+| Event                                    | Effect on access                                     | Effect on data                                    |
+| ---------------------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| Refresh/tab close                        | Valid cookie permits private reads                   | Draft clears; saved shares remain                 |
+| Cookie loss/expiry or signing-key change | Private history cannot be recovered                  | Records remain; public links expire independently |
+| Seven days after saving                  | Public links expire; private reads remain authorized | No automatic deletion                             |
+| Restart/replace server                   | Stable signing key preserves owner identity          | Memory clears; DynamoDB remains                   |
+| Another replica                          | Same cookie/owner checks                             | Memory Maps are isolated; DynamoDB is shared      |
 
-No per-share delete endpoint, backups, raw audio storage, or import of earlier process-local test data is added. Terraform enables encryption at rest for DynamoDB. There is no permanent journal. DynamoDB TTL deletion can lag expiry by days; expiration is immediate access denial, not an exact-time erasure guarantee. Clearing cookies is not deletion. Recipients can forward links or keep copies. See [the infrastructure guide](../infra/terraform/README.md) for retention tradeoffs and rollout instructions.
+No manual delete endpoint, backup or account recovery is provided. Link expiration cannot recall recipient copies.
 
 ## Documentation rules
 

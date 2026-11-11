@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readPublicShare } from '../../src/shares/server/application/read-public-share';
-import { InMemoryShareRepository } from '../../src/shares/server/storage/repository';
+import { InMemoryShareRepository } from '../../src/shares/server/storage/memory-repository';
 import { dispatch } from '../../src/shares/server/app';
 import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
@@ -35,7 +35,7 @@ async function create() {
   };
 }
 
-test('public service validates UUIDs before lookup and honors the stored expiry deadline', async (t) => {
+test('public service validates UUIDs before lookup and expires public links without expiring private history', async (t) => {
   let currentTime = now * 1000;
   t.mock.method(Date, 'now', () => currentTime);
   const store = new InMemoryShareRepository();
@@ -50,11 +50,13 @@ test('public service validates UUIDs before lookup and honors the stored expiry 
     reflection,
     text: saved.text
   });
-  const boundary = saved.expiresAt * 1000;
+  const boundary = Date.parse(saved.createdAt) + 7 * 86400_000;
   currentTime = boundary - 1;
   assert.ok(await readPublicShare(saved.id, store));
   currentTime = boundary;
   assert.equal(await readPublicShare(saved.id, store), null);
+  assert.ok(await store.findByOwner(saved.id, saved.ownerId));
+  assert.equal((await store.listByOwner(saved.ownerId)).length, 1);
   currentTime = boundary + 1;
   assert.equal(await readPublicShare(saved.id, store), null);
   currentTime = Number.NaN;

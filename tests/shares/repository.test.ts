@@ -1,28 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { InMemoryShareRepository } from '../../src/shares/server/storage/repository';
+import { InMemoryShareRepository } from '../../src/shares/server/storage/memory-repository';
 import { createStoredShare } from '../../src/shares/server/storage/create-stored-share';
 import { reflection } from '../../src/shares/reflection/reflection-fixture';
 
-test('repository instances isolate data, reject invalid writes, and detach every read', async () => {
+test('memory repository instances isolate records', async () => {
+  const owner = randomUUID();
   const first = new InMemoryShareRepository();
   const second = new InMemoryShareRepository();
-  const owner = randomUUID();
-  const saved = await first.create(owner, 'A fictional isolated record.');
+  const saved = await first.create(owner, 'Fictional isolated record.');
   assert.deepEqual(await second.listByOwner(owner), []);
   assert.equal(await second.findByOwner(saved.id, owner), null);
-  await assert.rejects(first.create(owner, '   '));
-  await assert.rejects(first.create('not-an-owner-uuid', 'Fictional text.'));
-  const listed = await first.listByOwner(owner);
-  assert.equal(listed.length, 1);
-  listed[0].reflection.title = 'Changed list snapshot';
-  const found = await first.findByOwner(saved.id, owner);
-  assert.ok(found);
-  assert.equal(found.reflection.title, reflection.title);
-  found.text = 'Changed detail snapshot';
-  assert.equal((await first.findByOwner(saved.id, owner))?.text, saved.text);
-  assert.equal(await first.findByOwner(saved.id, randomUUID()), null);
 });
 
 test('share construction validates metadata and captures a detached reading without persisting', () => {
@@ -41,3 +30,7 @@ test('share construction validates metadata and captures a detached reading with
   assert.notEqual(share.reflection.title, reflection.title);
   assert.throws(() => createStoredShare(owner, '  '));
 });
+
+import { repositoryContract } from './repository-contract';
+test('memory satisfies the shared repository contract', () =>
+  repositoryContract(new InMemoryShareRepository()));

@@ -1,3 +1,4 @@
-environment         = "dev"
-aws_region          = "us-west-2"
-deletion_protection = false
+project_name         = "doorknob"
+create_soniox_secret = false
+environment          = "dev"
+deletion_protection  = false

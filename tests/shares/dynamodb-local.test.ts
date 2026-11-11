@@ -9,13 +9,14 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { test } from 'node:test';
+import { repositoryContract } from './repository-contract';
 import { DynamoDbShareRepository } from '../../src/shares/server/storage/dynamodb-repository';
 import { createStoredShare } from '../../src/shares/server/storage/create-stored-share';
 
 const endpoint = process.env.DYNAMODB_LOCAL_ENDPOINT;
 
 test(
-  'DynamoDB Local applies history ordering, expiry filtering, pagination, and conditional writes',
+  'DynamoDB Local applies repository contract, ordering, pagination, and conditional writes',
   { skip: !endpoint },
   async (t) => {
     const client = new DynamoDBClient({
@@ -63,6 +64,7 @@ test(
     );
 
     const repository = new DynamoDbShareRepository(tableName, documentClient);
+    await repositoryContract(repository);
     const ownerId = randomUUID();
     const otherOwnerId = randomUUID();
     const now = Date.now();
@@ -83,17 +85,14 @@ test(
 
     const older = createStoredShare(ownerId, 'Fictional older share.');
     older.createdAt = new Date(now - 30_000).toISOString();
-    older.expiresAt = Math.floor(now / 1000) + 60_000;
     await putShare(older);
 
     const newer = createStoredShare(ownerId, 'Fictional newer share.');
     newer.createdAt = new Date(now - 20_000).toISOString();
-    newer.expiresAt = Math.floor(now / 1000) + 60_000;
     await putShare(newer);
 
     const future = createStoredShare(ownerId, 'Fictional future-dated share.');
     future.createdAt = new Date(now + 20_000).toISOString();
-    future.expiresAt = Math.floor(now / 1000) + 60_000;
     await putShare(future);
 
     const inserted = await repository.create(
@@ -106,11 +105,12 @@ test(
     );
     await putShare(otherOwnerShare);
 
+    const paddedIds: string[] = [];
     for (let index = 0; index < 5; index += 1) {
-      const expired = createStoredShare(ownerId, 'Fictional expired share.');
-      expired.createdAt = new Date(now + 60_000 + index * 1000).toISOString();
-      expired.expiresAt = Math.floor(now / 1000) - 1;
-      await putShare(expired, 280_000);
+      const padded = createStoredShare(ownerId, 'Fictional paginated share.');
+      padded.createdAt = new Date(now + 60_000 + index * 1000).toISOString();
+      await putShare(padded, 280_000);
+      paddedIds.unshift(padded.id);
     }
 
     const duplicateWrite = new PutCommand({
@@ -127,15 +127,18 @@ test(
 
     assert.deepEqual(
       (await repository.listByOwner(ownerId)).map((share) => share.id),
-      [future.id, inserted.id, newer.id, older.id]
+      [...paddedIds, future.id, inserted.id, newer.id, older.id]
     );
     assert.equal(await repository.findById(future.id).then(Boolean), true);
-    const expiredLookup = createStoredShare(
-      ownerId,
-      'Fictional expired lookup.'
+    // Old TTL metadata is ignored by private reads after the retention policy change.
+    const old = createStoredShare(ownerId, 'Fictional retained history.');
+    old.createdAt = new Date(now - 8 * 86400_000).toISOString();
+    await documentClient.send(
+      new PutCommand({
+        TableName: tableName,
+        Item: { ...old, expiresAt: Math.floor(now / 1000) - 1 }
+      })
     );
-    expiredLookup.expiresAt = Math.floor(now / 1000) - 1;
-    await putShare(expiredLookup);
-    assert.equal(await repository.findById(expiredLookup.id), null);
+    assert.ok(await repository.findByOwner(old.id, ownerId));
   }
 );

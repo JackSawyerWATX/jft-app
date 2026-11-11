@@ -60,15 +60,15 @@ The reading and April 23, 2025 date remain deliberate placeholders.
 
 ## Persistence and privacy limitations
 
-Shares expire seven days after creation, for private history/details and public links alike. The default local store is a process-local Map; restarting loses its contents. For deployed environments, explicitly select DynamoDB using `SHARE_PERSISTENCE=dynamodb`, `DYNAMODB_TABLE_NAME`, and `DYNAMODB_REGION`. The SDK uses the assigned compute role, without embedded AWS keys. See the [Terraform and Amplify deployment guide](infra/terraform/README.md) for infrastructure, state bootstrap, configuration, costs, and rollout checks. Nothing is deployed automatically.
+Public links expire seven days after creation. Private history has no automatic expiration; access still requires the original anonymous session. The default local store is a process-local Map; restarting loses its contents. For deployed environments, explicitly select DynamoDB using `SHARE_PERSISTENCE=dynamodb`, `DYNAMODB_TABLE_NAME`, and `DYNAMODB_REGION`. The SDK uses the assigned compute role, without embedded AWS keys. See the [Terraform and Amplify deployment guide](infra/terraform/README.md) for infrastructure, state bootstrap, configuration, costs, and rollout checks. Nothing is deployed automatically.
 
-Each saved record contains a server-generated UUID, timestamp, text, reading snapshot, anonymous owner ID, and server-only Unix-second `expiresAt`. Owner and expiry fields are omitted from API responses. DynamoDB persistence survives server replacement and supports multiple instances. Its owner index is eventually consistent, so a newly saved share may take a moment to appear in history. The original reading stays attached even if the source changes.
+Each saved record contains a server-generated UUID, timestamp, text, reading snapshot, anonymous owner ID. Owner fields are omitted from API responses. DynamoDB persistence survives server replacement and supports multiple instances. Its owner index is eventually consistent, so a newly saved share may take a moment to appear in history. The original reading stays attached even if the source changes.
 
 A signed HttpOnly, SameSite=Lax cookie identifies the anonymous session, with a 30-day lifetime and Secure in production. All private reads enforce ownership. Cookies provide neither login accounts nor recovery. Losing the cookie or changing `SESSION_SECRET` loses private access; it does not delete the underlying records or revoke public links. Keep a stable production signing secret. Foreign-origin POSTs are rejected before session creation. Share IDs and cookies are bearer credentials and must never be logged.
 
-DynamoDB TTL eventually deletes expired shares, potentially days after their reads become unavailable. The local Map prunes expired records during repository operations. No manual delete endpoint, audio recording storage, backup, or permanent journal is added. Unsaved drafts live only in React memory and are discarded on refresh or leaving the mounted app; in-app navigation and failed saves retain the draft. Recipient copies and external provider retention are separate. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
+No automatic record deletion, manual delete endpoint, audio storage, backup, or account recovery is provided. DynamoDB shares survive restarts; memory shares do not. Unsaved drafts live only in React memory. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
-Signed sharing links are optional: saving prepares a URL but never sends it automatically. No raw audio storage, registration, real reading feeds, or harness integration are included. Optional live transcription sends microphone audio to OpenAI only during explicitly started sessions.
+Signed sharing links are optional: saving prepares a URL but never sends it automatically. No raw audio storage, registration, real reading feeds, or harness integration are included. Optional live transcription sends microphone audio to Soniox (or configured OpenAI) only during explicitly started sessions.
 
 ## Validation
 
@@ -94,7 +94,7 @@ Manual checks:
 3. Open a separate private browser session and confirm its history is empty and the first session's share ID returns 404.
 4. Simulate a failed POST in browser developer tools; verify the draft remains with no confirmation.
 5. Check phone and desktop layouts, keyboard navigation, and heading focus.
-6. In memory mode, restart the server and confirm history is empty. In DynamoDB mode, confirm unexpired shares survive with the same signing key/cookie. Clear cookies and confirm previous shares are inaccessible privately.
+6. In memory mode, restart the server and confirm history is empty. In DynamoDB mode, confirm shares survive with the same signing key/cookie. Clear cookies and confirm previous shares are inaccessible privately.
 
 ## Project layout
 

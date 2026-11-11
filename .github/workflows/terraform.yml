@@ -24,6 +24,8 @@ jobs:
         working-directory: infra/terraform
       - run: terraform validate
         working-directory: infra/terraform
+      - run: terraform test
+        working-directory: infra/terraform
       - run: terraform init -backend=false -input=false
         working-directory: infra/terraform/bootstrap
       - run: terraform validate

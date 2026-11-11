@@ -13,9 +13,6 @@ variable "bucket_name" {
   type        = string
   description = "Globally unique state bucket name, chosen explicitly for this environment."
 }
-variable "aws_region" {
-  type = string
-}
 variable "environment" {
   type = string
   validation {
@@ -25,7 +22,7 @@ variable "environment" {
 }
 
 provider "aws" {
-  region = var.aws_region
+  # Uses the same AWS_REGION/profile as the application root.
   default_tags {
     tags = { Application = "doorknob", Environment = var.environment, ManagedBy = "Terraform" }
   }

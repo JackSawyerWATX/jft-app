@@ -7,21 +7,21 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "node --conditions=react-server --import ./tests/fixtures/local-persistence.mjs --import tsx --test --test-isolation=none tests/shares/*.test.ts tests/shares/transcription/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/transcription/client/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/cleanup/client/*.test.ts && node --import tsx --test tests/quality/*.test.ts",
+    "test": "node --conditions=react-server --import ./tests/fixtures/local-persistence.mjs --import tsx --import ./tests/shares/setup.ts --test --test-isolation=none tests/shares/*.test.ts tests/shares/transcription/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/transcription/client/*.test.ts && node --import tsx --test --test-isolation=none tests/shares/cleanup/client/*.test.ts && node --import tsx --test tests/quality/*.test.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run openapi:lint && npm test && npm run build",
     "lint": "eslint . --max-warnings=0",
     "test:e2e": "playwright test",
-    "test:dynamodb": "node --conditions=react-server --import tsx --test tests/shares/dynamodb-local.test.ts",
     "openapi:generate": "node --conditions=react-server --import tsx scripts/generate-openapi.ts",
-    "openapi:lint": "npm run openapi:generate && spectral lint .tmp/openapi.yaml --ruleset .spectral.yaml --fail-severity warn"
+    "openapi:lint": "npm run openapi:generate && spectral lint .tmp/openapi.yaml --ruleset .spectral.yaml --fail-severity warn",
+    "test:dynamodb": "node --conditions=react-server --import tsx --test tests/shares/dynamodb-local.test.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1162.0",
-    "@aws-sdk/client-secrets-manager": "^3.1160.0",
-    "@aws-sdk/lib-dynamodb": "^3.1162.0",
+    "@aws-sdk/client-secrets-manager": "^3.1163.0",
+    "@aws-sdk/util-arn-parser": "^3.972.51",
     "@hono/zod-openapi": "^1.6.3",
+    "@soniox/client": "^2.5.0",
     "content-type": "^3.1.1",
     "hono": "^4.13.16",
     "next": "^16.4.5",
@@ -30,11 +30,14 @@
     "react-dom": "^19.1.0",
     "react-textarea-autosize": "^8.5.9",
     "server-only": "0.0.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@aws-sdk/client-dynamodb": "^3.1162.0",
+    "@aws-sdk/lib-dynamodb": "^3.1162.0"
   },
   "devDependencies": {
     "@apidevtools/swagger-parser": "^13.1.0",
     "@axe-core/playwright": "^4.14.0",
+    "@dotenvx/primitives": "^4.4.0",
     "@playwright/test": "^1.65.0",
     "@stoplight/spectral-cli": "^6.17.1",
     "@tailwindcss/postcss": "^4.3.4",

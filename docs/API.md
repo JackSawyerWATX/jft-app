@@ -51,7 +51,7 @@ Messages are intended for display. Branch on `error.code` and the HTTP status, n
 
 Create/list/detail responses include `shareUrl`, a relative URL such as `/s/{id}`. It is generated once when the record is constructed, before storage. Resolve it against the application origin for native sharing or copying. Reads return the original URL without renewal. There is no separate link-generation endpoint or extra sharing request. Treat URLs as bearer credentials and never log them.
 
-The server rejects every share read after seven days, using the server-only Unix-second `expiresAt` and a maximum-age guard against stored `createdAt`. TTL has second precision. The URL has no query parameters; adding or changing an `expires` query parameter has no effect. Expiration has no configuration, response metadata field, or UI label. Public responses exclude `shareUrl` and all owner metadata.
+The public service rejects links seven days after the stored `createdAt` timestamp. Private history/details do not expire. Client query parameters cannot extend link lifetime. Public responses exclude `shareUrl` and owner metadata.
 
 ## Read a public share
 
@@ -61,7 +61,7 @@ Success is **200** with only `{ "reflection": { "id": "...", "date": "2025-04-23
 
 The recipient HTML page is `/s/{id}` with the same UUID and service boundary. Valid links show the original reading date/title/body and written thoughts. Unavailable links show a generic message (HTML 200); unexpected server failures use a separate retryable error boundary with sanitized diagnostics and an initial HTTP 500 response; this is a minimal reading page, not private-history navigation. Pages have dynamic private/no-store caching and noindex/no-referrer headers and metadata. No session is established. No content-specific metadata or external tracking is added.
 
-These are bearer links: recipients may forward, copy, or save content. There is no immediate revocation, token storage, link version counter, revoke endpoint, or delete endpoint. Future deletion of a share will invalidate its links by removing the record. Expiration immediately denies all read paths. DynamoDB TTL eventually deletes records; memory mode prunes expired records on repository operations. Neither can recall received copies. A process restart loses memory-mode records, while DynamoDB records survive until expiry. [Architecture](ARCHITECTURE.md#public-sharing-boundary) describes the trust boundary and tradeoffs.
+These are bearer links: recipients may forward, copy, or save content. There is no immediate revocation, token storage, link version counter, revoke endpoint, or delete endpoint. Future deletion of a share will invalidate its links by removing the record. Expiration denies public reads only and does not delete records. Neither can recall received copies. A process restart loses memory-mode records, while DynamoDB records survive restarts. [Architecture](ARCHITECTURE.md#public-sharing-boundary) describes the trust boundary and tradeoffs.
 
 ## Create a share
 
@@ -101,13 +101,13 @@ Success is **201 Created** with a share and a relative `Location: /api/shares/{i
 
 `GET /api/shares`
 
-Success is **200 OK** with an array of this session's shares, newest creation timestamp first. No shares is `[]`, not an error. The Map implementation orders equal timestamps by newest insertion first; DynamoDB does not promise tie order. Its owner index is eventually consistent, so a new share may appear in history after a short delay. Expired shares are excluded. There are no query filters, pagination, or owner-selection parameters; ownership always comes from the verified cookie.
+Success is **200 OK** with an array of this session's shares, newest creation timestamp first. No shares is `[]`, not an error. The Map implementation orders equal timestamps by newest insertion first; DynamoDB does not promise tie order. Its owner index is eventually consistent, so a new share may appear in history after a short delay. There are no query filters, pagination, or owner-selection parameters; ownership always comes from the verified cookie.
 
 ## Read one private share
 
 `GET /api/shares/:id`
 
-Success is **200 OK** with the same share shape as creation. This private endpoint requires the owner session. The same UUID also grants public read access through `/s/{id}` for seven days, so it must be treated as a credential. Expired records, IDs with no corresponding record (including non-UUID strings), and IDs belonging to a different owner all return **404 Not Found** with the same error message. An invalid cookie starts a fresh owner, which cannot read a previous owner's share and therefore receives 404.
+Success is **200 OK** with the same share shape as creation. This private endpoint requires the owner session. The same UUID also grants public read access through `/s/{id}` for seven days, so it must be treated as a credential. IDs with no corresponding record (including non-UUID strings), and IDs belonging to a different owner all return **404 Not Found** with the same error message. An invalid cookie starts a fresh owner, which cannot read a previous owner's share and therefore receives 404.
 
 ## Status and stable error codes
 
@@ -177,7 +177,7 @@ The first POST issues the cookie; subsequent requests use it. On a browserless H
 
 ## Retention and failed-write semantics
 
-Memory-mode records exist only in the same Node process and are lost on restart; replicas do not share that Map. Explicitly configured DynamoDB storage survives restarts and is shared across instances. Both implementations reject shares at seven-day expiry on every read path. Memory prunes expired records during repository operations; DynamoDB TTL eventually deletes them asynchronously. Cookie removal, cookie expiry, and signing-key changes lose private access without deleting records or revoking public links. No manual delete endpoint is added. See [data lifecycle](DATA_GLOSSARY.md#app-data-lifecycle).
+Memory-mode records exist only in the same Node process and are lost on restart; replicas do not share that Map. Explicitly configured DynamoDB storage survives restarts and is shared across instances. Public links expire independently of private history. Neither store automatically deletes records. Cookie removal, cookie expiry, and signing-key changes lose private access without deleting records or revoking public links. No manual delete endpoint is added. See [data lifecycle](DATA_GLOSSARY.md#app-data-lifecycle).
 
 There are no idempotency keys or automatic retries. If the server commits but its response is lost, a client sees a failed request despite a stored share. Check history before retrying an ambiguous write if duplicate text matters. UI duplicate prevention blocks repeated submissions only while a save is pending. Do not describe a rejected fetch as proof that no write occurred.
 
@@ -204,3 +204,7 @@ Cleanup is automatically requested only after successful explicit Stop with new 
 The named `ApiError` schema provides the shared envelope; response-specific schemas constrain the allowed codes. `DraftText` reuses the bounded share-input model; `TranscriptionCredential` is shared by server output validation and the browser parser. Both paid endpoints document required Origin headers and 429 Retry-After headers. Transcription OPTIONS is registered through the same OpenAPI method helper as cleanup. This changes the former transcription string-error response into the coded envelope; the website already handles credential failures by status. Any external consumer of the old string response must update.
 
 See [API client boundaries](API_CLIENTS.md) for current browser support, native-client gaps and the HTTP/streaming split. This change adds no native authentication, session-bootstrap endpoint, cross-origin permission, versioned API, idempotency key or persistent storage.
+
+### Transcription provider assertion
+
+Session requests may include `X-STT-Provider` matching the immutable runtime bootstrap. A mismatch returns `503 TRANSCRIPTION_UNAVAILABLE` before contacting a provider. Missing headers remain compatible with legacy OpenAI clients. This header asserts configuration; it does not select a provider or replace existing origin/session checks.

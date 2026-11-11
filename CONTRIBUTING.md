@@ -7,8 +7,11 @@ Use Node.js 24 LTS and npm. The runtime is pinned in `.nvmrc` and constrained by
 ```bash
 nvm use
 npm ci
+export STT_PROVIDER=soniox
 npm run dev
 ```
+
+`STT_PROVIDER` defaults to `soniox`; set it explicitly to `openai` to use the retained alternative.
 
 Development generates an ephemeral session signing secret. Optional live transcription needs server-only OpenAI configuration; see [transcription deployment](docs/TRANSCRIPTION.md). Builds and mocked tests require no provider credentials. Production requires a random `SESSION_SECRET` of at least 32 bytes; sharing links use the random share UUID and need no separate secret. See the README. Never commit `.env` files, credentials, or personal recovery text.
 

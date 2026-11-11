@@ -4,10 +4,8 @@ import { z } from 'zod';
 import { createShareSchema, shareSchema } from '../../model';
 import { reflection } from '../../reflection/reflection-fixture';
 
-export const SHARE_LIFETIME_SECONDS = 7 * 24 * 60 * 60;
 export const storedShareSchema = shareSchema.extend({
-  ownerId: z.uuid(),
-  expiresAt: z.number().int().positive()
+  ownerId: z.uuid()
 });
 /** Server-only record; project through shareSchema before returning it to the owner. */
 export type StoredShare = z.infer<typeof storedShareSchema>;
@@ -21,15 +19,9 @@ export function createStoredShare(ownerId: string, text: string): StoredShare {
     id,
     shareUrl: `/s/${id}`,
     createdAt: new Date(now).toISOString(),
-    expiresAt: Math.floor(now / 1000) + SHARE_LIFETIME_SECONDS,
     kind: 'text',
     text: input.text,
     reflection: { ...reflection },
     ownerId
   });
-}
-
-/** The server-created Unix-second deadline is authoritative for every store. */
-export function isShareActive(share: StoredShare, now = Date.now()): boolean {
-  return Number.isFinite(now) && now < share.expiresAt * 1000;
 }

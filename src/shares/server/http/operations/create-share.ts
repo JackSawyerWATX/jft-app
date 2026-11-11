@@ -1,7 +1,7 @@
 import 'server-only';
 import { createRoute, type RouteHandler } from '@hono/zod-openapi';
 import { shareSchema } from '../../../model';
-import { shareRepository } from '../../storage/repository';
+import { shareRepository } from '../../storage/configured-repository';
 import type { SessionEnvironment } from '../middleware';
 import {
   share,

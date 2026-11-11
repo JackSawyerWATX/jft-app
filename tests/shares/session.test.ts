@@ -34,7 +34,7 @@ test('stale signing keys and expired credentials start fresh owners without trus
   const { serializeSigned } = await import('hono/utils/cookie');
   const { randomUUID } = await import('node:crypto');
   const { InMemoryShareRepository } =
-    await import('../../src/shares/server/storage/repository');
+    await import('../../src/shares/server/storage/memory-repository');
   const now = 1_800_000_000;
   const ownerId = randomUUID();
   const key = 'fictional-current-session-key-at-least-32-bytes';

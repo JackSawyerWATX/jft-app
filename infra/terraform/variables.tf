@@ -1,8 +1,3 @@
-variable "aws_region" {
-  type        = string
-  description = "Region of the shares table and existing Amplify deployment."
-}
-
 variable "environment" {
   type        = string
   description = "Explicit environment. Use separate backends and credentials for production."
@@ -15,8 +10,7 @@ variable "environment" {
 
 variable "project_name" {
   type        = string
-  default     = "doorknob"
-  description = "Resource name prefix."
+  description = "Resource name prefix, explicitly supplied by the selected environment."
 }
 
 variable "tags" {

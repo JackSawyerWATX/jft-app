@@ -33,9 +33,10 @@ resource "aws_dynamodb_table" "shares" {
       key_type       = "RANGE"
     }
   }
+  # Public-link expiry does not delete private history. Disable legacy share TTL.
   ttl {
     attribute_name = "expiresAt"
-    enabled        = true
+    enabled        = false
   }
   server_side_encryption {
     enabled = true

@@ -12,7 +12,7 @@ output "runtime_environment" {
   value = {
     SHARE_PERSISTENCE   = "dynamodb"
     DYNAMODB_TABLE_NAME = aws_dynamodb_table.shares.name
-    DYNAMODB_REGION     = var.aws_region
+    DYNAMODB_REGION     = data.aws_region.current.region
   }
   description = "Non-secret server-only settings. Never put AWS keys in Amplify variables."
 }

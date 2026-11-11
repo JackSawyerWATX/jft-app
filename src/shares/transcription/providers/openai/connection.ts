@@ -12,7 +12,7 @@ export async function requestOpenAICredential(
   const started = performance.now();
   const response = await request('/api/transcription/session', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'x-stt-provider': 'openai' },
     body: '{}',
     signal,
     cache: 'no-store'

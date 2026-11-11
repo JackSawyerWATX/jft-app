@@ -1,3 +1,2 @@
 bucket = "REPLACE-WITH-PROD-STATE-BUCKET"
 key    = "doorknob/prod/terraform.tfstate"
-region = "us-west-2"

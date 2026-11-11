@@ -1,7 +1,7 @@
 import 'server-only';
 import { createRoute, type RouteHandler, z } from '@hono/zod-openapi';
 import { shareSchema } from '../../../model';
-import { shareRepository } from '../../storage/repository';
+import { shareRepository } from '../../storage/configured-repository';
 import type { SessionEnvironment } from '../middleware';
 import {
   share,
@@ -24,7 +24,7 @@ export const listSharesRoute = createRoute({
   responses: {
     200: {
       description:
-        'Newest timestamp first; equal timestamps use newest insertion first. No pagination or owner query filter.',
+        'Newest timestamp first; equal timestamp order is unspecified. No pagination or owner query filter.',
       headers: privateHeaders,
       content: { 'application/json': { schema: z.array(share) } }
     },

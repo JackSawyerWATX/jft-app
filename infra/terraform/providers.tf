@@ -1,5 +1,5 @@
 provider "aws" {
-  region = var.aws_region
+  # Use AWS_REGION (or the selected AWS profile), including for S3 state.
   default_tags {
     tags = merge(var.tags, {
       Application = var.project_name
@@ -8,3 +8,5 @@ provider "aws" {
     })
   }
 }
+
+data "aws_region" "current" {}

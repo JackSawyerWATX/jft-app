@@ -313,3 +313,26 @@ test('microphone grant advances to connecting and late connection callbacks cann
   act(() => engine.events!.ended());
   assert.equal(s.result.current.state, 'idle');
 });
+
+test('verbatim provider fragments preserve joins, whitespace, edits and repeated sessions', () => {
+  const hook = setup();
+  act(() => hook.result.current.start());
+  const engine = hook.latest();
+  act(() => {
+    engine.events!.listening();
+    engine.events!.final(' ', 'verbatim'); // no words yet
+    engine.events!.final('Hel', 'verbatim');
+    engine.events!.final('lo', 'verbatim');
+    engine.events!.final(',', 'verbatim');
+    engine.events!.final(' ', 'verbatim');
+    engine.events!.final('world!', 'verbatim');
+    engine.events!.ended();
+  });
+  assert.equal(hook.result.current.text, 'Typed.\n\nHello, world!');
+  act(() => hook.result.current.start());
+  act(() => {
+    hook.latest().events!.final(' More.', 'verbatim');
+    hook.latest().events!.ended();
+  });
+  assert.equal(hook.result.current.text, 'Typed.\n\nHello, world!\n\nMore.');
+});

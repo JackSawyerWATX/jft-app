@@ -10,7 +10,6 @@ import {
 import { z } from 'zod';
 import {
   createStoredShare,
-  isShareActive,
   storedShareSchema,
   type StoredShare
 } from './create-stored-share';
@@ -52,10 +51,9 @@ export class DynamoDbShareRepository implements ShareRepository {
         ConsistentRead: true
       })
     );
-    // DynamoDB deletes expired items asynchronously, so check the authoritative deadline.
     if (!Item) return null;
     const share = storedShareSchema.parse(Item);
-    return isShareActive(share) ? share : null;
+    return share;
   }
 
   async findByOwner(id: string, ownerId: string): Promise<StoredShare | null> {
@@ -66,7 +64,6 @@ export class DynamoDbShareRepository implements ShareRepository {
 
   async listByOwner(ownerId: string): Promise<StoredShare[]> {
     const shares: StoredShare[] = [];
-    const now = Math.floor(Date.now() / 1000);
     let cursor: QueryCommandInput['ExclusiveStartKey'];
 
     do {
@@ -75,9 +72,7 @@ export class DynamoDbShareRepository implements ShareRepository {
           TableName: this.tableName,
           IndexName: OWNER_INDEX_NAME,
           KeyConditionExpression: 'ownerId = :owner',
-          // Hide expired shares from history while DynamoDB waits to delete them.
-          FilterExpression: 'expiresAt > :now',
-          ExpressionAttributeValues: { ':owner': ownerId, ':now': now },
+          ExpressionAttributeValues: { ':owner': ownerId },
           ScanIndexForward: false,
           ExclusiveStartKey: cursor
         })

@@ -1,4 +1,8 @@
 import type { NextConfig } from 'next';
+import { parseTranscriptionProvider } from './src/shares/transcription/config';
+
+// Fail the CLI on invalid configuration; instrumentation errors alone leave Next running.
+parseTranscriptionProvider(process.env.STT_PROVIDER);
 
 const config: NextConfig = {
   // Quick Tunnel hostnames change on each run; permit their development assets.
