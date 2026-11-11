@@ -9,8 +9,11 @@ Use Node.js **24 LTS**, pinned in `.nvmrc`:
 ```bash
 nvm use
 npm ci
+export STT_PROVIDER=soniox
 npm run dev
 ```
+
+`STT_PROVIDER` defaults to `soniox`. Set it explicitly in the environment or ignored `.env.local` to select `soniox` or the retained `openai` alternative.
 
 Open http://localhost:3000. Typing, saving, and tests need no provider credentials: a random session signing secret is generated for the running process. Optionally set `SESSION_SECRET` to a random value of at least 32 bytes in `.env.local`. Never commit secrets or personal recovery text.
 
@@ -20,7 +23,7 @@ For a production-mode local run, create `.env.local` first:
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Copy the generated value into `.env.local` as `SESSION_SECRET=<generated value>`, then run:
+Put `STT_PROVIDER=soniox` and the generated `SESSION_SECRET=<generated value>` in `.env.local`, then run:
 
 ```bash
 npm run build
@@ -66,7 +69,7 @@ A signed, HttpOnly, SameSite=Lax cookie identifies the anonymous session. It exp
 
 **This storage is for local development. Restarting the server clears all shares. Multiple processes, replicas, and serverless instances such as Vercel do not share the Map and cannot provide reliable persistence.** No disk storage, database, encryption at rest, backup, account recovery, or durable deployment is provided. Unsaved drafts live only in React memory. Refreshing, closing the tab, or leaving the mounted app starts a fresh share. In-app Today/Past shares navigation and failed saves retain the current draft until refresh or a successful save. Older stored drafts are discarded on page load. The development signing secret also resets on process restart unless configured. There is no per-share deletion or expiry job; cookie loss does not remove records from the running Map. See [the data lifecycle](docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
-Signed sharing links are optional: saving prepares a URL but never sends it automatically. No raw audio storage, registration, real reading feeds, or harness integration are included. Optional live transcription sends microphone audio to OpenAI only during explicitly started sessions.
+Signed sharing links are optional: saving prepares a URL but never sends it automatically. No raw audio storage, registration, real reading feeds, or harness integration are included. Optional live transcription sends microphone audio to Soniox (or configured OpenAI) only during explicitly started sessions.
 
 ## Validation
 
@@ -92,7 +95,7 @@ Manual checks:
 3. Open a separate private browser session and confirm its history is empty and the first session's share ID returns 404.
 4. Simulate a failed POST in browser developer tools; verify the draft remains with no confirmation.
 5. Check phone and desktop layouts, keyboard navigation, and heading focus.
-6. Restart the server and confirm history is empty. Clear cookies and confirm previous shares are inaccessible.
+6. Restart the server and confirm history is empty. Clear cookies and confirm previous shares are inaccessible privately.
 
 ## Project layout
 
@@ -113,7 +116,7 @@ src/
     history/                 history hook, list, and list items
     detail/                  saved-share detail, sharing action, thoughts text
     reflection/              reading presentation and fictional fixture
-    transcription/           engine contract, OpenAI adapter, audio activity, lifecycle hook
+    transcription/           engine contract, Soniox/OpenAI adapters, audio activity, lifecycle hook
     server/
       operations/            private/public operation contracts and handlers
       app.ts                 operation registration and dispatch
@@ -167,7 +170,7 @@ a compatible fix for this project. Revisit when the upstream tooling is patched.
 
 ## Speak your share
 
-Tap **Record your share**, allow microphone access, and speak. Audio streams to OpenAI; provisional words appear in the existing teleprompter, then corrected, punctuated final segments enter the editable draft. Tap **Stop listening**, wait for finalization and automatic cleanup, review/edit inline, and explicitly **Save privately**. Cleanup adds natural paragraphs and removes obvious hesitation fillers. Recording again appends a paragraph. Refresh starts a fresh draft. There is no browser SpeechRecognition fallback or second transcription source.
+Tap **Record your share**, allow microphone access, and speak. Audio streams to Soniox by default (or OpenAI when selected); provisional words appear in the existing teleprompter, then corrected, punctuated final segments enter the editable draft. Tap **Stop listening**, wait for finalization and automatic cleanup, review/edit inline, and explicitly **Save privately**. Cleanup adds natural paragraphs and removes obvious hesitation fillers. Recording again appends a paragraph. Refresh starts a fresh draft. There is no browser SpeechRecognition fallback or automatic provider fallback.
 
 Transcription needs HTTPS (localhost works for development), microphone permission, WebRTC, and Web Audio. Permission denial, connection loss, provider failure, leaving the recording screen, hiding the page, and unmount stop capture and release tracks/connections. Finalized words remain; provisional words are discarded on failure. Stop releases the microphone immediately and allows up to five seconds for final results. A timeout shows a notice rather than silently claiming complete transcription. Sessions stop after ten minutes; tap again to append more. At 10,000 Unicode code points, the draft is clipped to the limit and recording is canceled. Typing and saving work without provider access.
 
@@ -181,7 +184,7 @@ After Stop receives the final words, a loading wheel labeled **Tidying!** above 
 
 The cleaned draft remains editable and survives in-app navigation; refresh discards it. While cleanup runs, recording/saving wait, but typing cancels the pending result and keeps your edits. Navigation cancels pending cleanup. Failure, timeout, refusal or invalid output keeps the original and offers **Retry cleanup**. Cleanup never runs on provisional text, microphone cancellation, recording errors, automatic session endings or ordinary typing. It never saves automatically. Owner and recipient detail pages render blank-line-separated text as separate paragraphs, with extra spacing on small screens.
 
-Cleanup uses the same server key and `STT_ENABLED` setting. Restricted keys additionally need **Responses → Request** and access to `gpt-5.4-mini`; an unrestricted key already supplies endpoint permission. The Responses request uses `store:false` and no tools. This does not disable OpenAI's standard abuse-monitoring retention. Builds and tests need no key and make no live cleanup requests.
+Cleanup retains its independent OpenAI server key and the existing `STT_ENABLED` setting. Restricted keys additionally need **Responses → Request** and access to `gpt-5.4-mini`; an unrestricted key already supplies endpoint permission. The Responses request uses `store:false` and no tools. This does not disable OpenAI's standard abuse-monitoring retention. Builds and tests need no key and make no live cleanup requests.
 
 Published cleanup pricing is $0.75 per million input tokens and $4.50 per million output tokens: approximately **$0.013 for 2,500 input plus 2,500 output tokens**, plus the short instruction text. Shorter drafts cost less. This is additional to audio transcription; each successful explicit Stop with new finalized words requests cleanup of the whole current draft. Source: [GPT-5.4 Mini](https://developers.openai.com/api/docs/models/gpt-5.4-mini), checked October 25, 2026.
 
@@ -190,20 +193,23 @@ Published cleanup pricing is $0.75 per million input tokens and $4.50 per millio
 Dependencies are installed with `npm ci` under Node 24. Tests need no credentials. For real recording, securely set these server-only variables in environment settings or an ignored `.env.local`:
 
 - `STT_ENABLED=true` explicitly enables paid transcription and text cleanup; unset/false keeps it disabled.
-- `STT_OPENAI_API_KEY` is an OpenAI project API key with Realtime/transcription access. Never use a `NEXT_PUBLIC_` prefix, commit the key, print it, or paste it into chat.
+- `STT_SONIOX_API_KEY` authorizes local Soniox speech; deployed environments use `STT_SONIOX_SECRET_ARN`.
+- `STT_OPENAI_API_KEY` is an independent OpenAI key for cleanup (Responses access) and optional OpenAI speech (Realtime access). Never use a `NEXT_PUBLIC_` prefix, commit the key, print it, or paste it into chat.
 - Production still requires the existing `SESSION_SECRET` (at least 32 random bytes).
 
-Only the short-lived credential reaches the browser. It expires after 60 seconds for establishing sessions; expiry does not terminate an already connected session and the credential can establish multiple sessions before expiry. Initial transcription configuration is not an enforceable spending boundary against a modified client. The app does not store credentials in browser storage. Do not record credential endpoint response bodies in proxy/APM logs.
+Only the short-lived credential reaches the browser. It expires after 60 seconds for establishing sessions. Soniox credentials are single-use and enforce a ten-minute active-session cap; the retained OpenAI credential can establish multiple sessions before expiry. Initial transcription configuration is not an enforceable spending boundary against a modified client. The app does not store credentials in browser storage. Do not record credential endpoint response bodies in proxy/APM logs.
 
-See [Amplify setup](docs/TRANSCRIPTION.md#aws-amplify-hosted-preview) for server key storage, branch permissions, and preview access protection. See the [code review and provider replacement guide](docs/TRANSCRIPTION_REVIEW.md) for adapter boundaries and remaining simplifications.
+See [Amplify setup](docs/TRANSCRIPTION.md#amplify-and-terraform) for server key storage, branch permissions, and preview access protection. See [recording and text ownership](docs/TRANSCRIPTION.md#recording-and-text-ownership) for adapter boundaries.
 
 ### Processing, retention, and cost
 
-The app captures microphone audio in memory and transmits it directly to OpenAI while explicitly recording. It does not write audio files, retain raw audio, play audio, or send audio through the share-save endpoint. OpenAI processes audio remotely; this is not local or offline recognition. Unsaved transcription text is held in React memory. After an explicit Stop successfully finalizes new words, the full finalized draft is sent through the BFF to OpenAI for cleanup; it is not written to the share repository. Only an explicit save creates a share. The existing in-memory share storage limitations still apply.
+The app captures microphone audio in memory and transmits it directly to Soniox by default, or OpenAI when selected, while explicitly recording. It does not write audio files, retain raw audio, play audio, or send audio through the share-save endpoint. The selected provider processes audio remotely; this is not local or offline recognition. Unsaved transcription text is held in React memory. After an explicit Stop successfully finalizes new words, the full finalized draft is sent through the BFF to OpenAI for cleanup; it is not written to the share repository. Only an explicit save creates a share. The existing in-memory share storage limitations still apply.
 
 OpenAI's API data is not used to train models by default unless the organization opts in. Standard abuse-monitoring logs may contain customer content and are retained for up to 30 days, subject to documented exceptions. The Realtime endpoint documents no application-state retention. Zero Data Retention/Modified Abuse Monitoring require eligibility and approval; this app does not establish those controls or promise zero provider retention.
 
-The selected `gpt-live-transcribe` model is listed at **$0.017 per streamed minute**, about **$1.02/hour** or **$0.17 for ten minutes** (official pricing checked October 25, 2026). Check current pricing and your project access before enabling it. Network, AWS hosting, and Secrets Manager charges are additional. No paid live request is part of automated tests.
+For the OpenAI alternative, `gpt-live-transcribe` is listed at **$0.017 per streamed minute**, about **$1.02/hour** or **$0.17 for ten minutes** (official pricing checked October 25, 2026). Check current pricing and your project access before enabling it. Network, AWS hosting, and Secrets Manager charges are additional. No paid live request is part of automated tests.
+
+Soniox audio usage has separate pricing and privacy/retention controls; verify current account terms before use. Application storage policies do not govern provider retention. See [the Soniox deployment runbook](docs/TRANSCRIPTION.md) and infrastructure cost guidance.
 
 Sources: [live transcription](https://developers.openai.com/api/docs/guides/realtime-transcription), [pricing](https://developers.openai.com/api/docs/pricing), [API data controls](https://developers.openai.com/api/docs/guides/your-data).
 
@@ -222,4 +228,10 @@ Use fictional text on a trusted HTTPS Amplify preview, with a configured provide
 
 `?speechDebug=1` enables console-only lifecycle diagnostics, remembered in this tab; `?speechDebug=0` disables them. URL enablement still works when sessionStorage is blocked. Filter for `[Doorknob speech]`. Events include availability, editor/start/end/disposal, results, and sanitized provider failure categories. No transcript, audio, credential, share URL, or raw provider error is logged. Never forward raw WebRTC/provider frames or HTTP credential responses to diagnostics.
 
-`npm run check` validates formatting, lint, OpenAPI, deterministic Node/hook tests, and the production build. After building, run `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --workers=2`. The Playwright server forces paid credential issuance off even if local settings enable it. Browser tests mock microphone/WebRTC and provider HTTP boundaries while exercising the real engine, hook, teleprompter, editing, saving, history, and sharing. They do not prove live provider availability or physical-device support.
+`npm run check` validates formatting, lint, OpenAPI, deterministic Node/hook tests, and the production build. After building, run `STT_PROVIDER=openai PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- --workers=2`. The Playwright server forces paid credential issuance off even if local settings enable it. Browser tests mock microphone/WebRTC and provider HTTP boundaries while exercising the real engine, hook, teleprompter, editing, saving, history, and sharing. They do not prove live provider availability or physical-device support.
+
+### Startup transcription selection
+
+`STT_PROVIDER` is validated server-side at startup. It defaults to `soniox`; set it to `openai` to select the existing WebRTC provider. See [live transcription deployment](docs/TRANSCRIPTION.md) for Soniox credentials and Terraform setup. The server passes this nonsecret value through runtime page bootstrap, and session requests assert a matching provider. Restart/redeploy when changing configuration. Only Soniox and OpenAI are supported; there is no automatic fallback. Existing OpenAI credentials and cleanup behavior are unchanged.
+
+Soniox browser contracts run separately after building: `STT_PROVIDER=soniox PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e -- tests/e2e/soniox.spec.ts --project=mobile-chromium --project=desktop-chromium`. These exercise the real SDK with synthetic audio and WebSocket boundaries; no Soniox credits are used.

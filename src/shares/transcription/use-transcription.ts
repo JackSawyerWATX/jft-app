@@ -1,6 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState
+} from 'react';
 import { configureSpeechDiagnostics, speechDiagnostic } from './diagnostics';
-import { createTranscriptionEngine } from './provider';
+import { transcriptionEngineFactory } from './provider';
+import { TranscriptionProviderContext } from './provider-context';
 import { appendTranscript } from './append-transcript';
 import type {
   TranscriptionEngine,
@@ -22,12 +29,10 @@ interface TranscriptionOptions {
 export function useTranscription(
   text: string,
   onTextChange: (text: string) => void,
-  {
-    createEngine = createTranscriptionEngine,
-    onStopped
-  }: TranscriptionOptions = {}
+  { createEngine, onStopped }: TranscriptionOptions = {}
 ) {
-  const factory = useRef(createEngine);
+  const provider = useContext(TranscriptionProviderContext);
+  const factory = useRef(createEngine ?? transcriptionEngineFactory(provider));
   const [state, setState] = useState<TranscriptionState>('unsupported');
   const [speaking, setSpeaking] = useState(false);
   const activityTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -39,7 +44,9 @@ export function useTranscription(
   const generation = useRef(0);
   const stopped = useRef(false);
   const current = useRef({ text, onTextChange, onStopped });
-  useEffect(() => {
+  // Synchronize at commit: a delayed passive effect can overwrite fragments
+  // received after that render and lose a fast provider update.
+  useLayoutEffect(() => {
     current.current = { text, onTextChange, onStopped };
   }, [text, onTextChange, onStopped]);
   useEffect(() => {
@@ -156,8 +163,12 @@ export function useTranscription(
             if (value) pulse();
           }
         },
-        final: (value) => {
-          if (!live() || !value.trim()) {
+        final: (value, join = 'space') => {
+          if (
+            !live() ||
+            !value ||
+            ((first || join === 'space') && !value.trim())
+          ) {
             speechDiagnostic('final-ignored', {
               session,
               stage: !live() ? 'stale' : 'empty'
@@ -167,7 +178,12 @@ export function useTranscription(
           finalized = true;
           pulse();
           speechDiagnostic('final-committed', { session });
-          const result = appendTranscript(current.current.text, value, first);
+          const result = appendTranscript(
+            current.current.text,
+            value,
+            first,
+            join
+          );
           first = false;
           current.current.text = result.text;
           current.current.onTextChange(result.text);

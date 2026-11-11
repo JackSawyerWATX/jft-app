@@ -8,6 +8,8 @@ export type TranscriptionState =
   | 'stopping'
   | 'error';
 
+export type TranscriptJoin = 'space' | 'verbatim';
+
 /** Engines emit each final segment exactly once; interim text replaces its predecessor. */
 export interface TranscriptionEvents {
   /** Microphone is granted; transcription transport is still connecting. */
@@ -16,7 +18,8 @@ export interface TranscriptionEvents {
   /** Optional speech activity cue; this is not an audio level measurement. */
   activity?(speaking: boolean): void;
   interim(text: string): void;
-  final(text: string): void;
+  /** OpenAI emits space-separated segments; Soniox emits verbatim fragments. */
+  final(text: string, join?: TranscriptJoin): void;
   error(message: string): void;
   ended(): void;
 }

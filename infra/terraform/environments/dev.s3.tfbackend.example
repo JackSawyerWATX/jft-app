@@ -1,0 +1,2 @@
+bucket = "REPLACE-WITH-DEV-STATE-BUCKET"
+key    = "doorknob/dev/terraform.tfstate"

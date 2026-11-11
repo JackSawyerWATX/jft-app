@@ -1,6 +1,7 @@
 import 'server-only';
+import { transcriptionProvider } from '../../transcription-config';
 import { burstLimited } from '../../auth/burst-limit';
-import { createRoute, type RouteHandler } from '@hono/zod-openapi';
+import { createRoute, z, type RouteHandler } from '@hono/zod-openapi';
 import {
   reportTranscriptionFailure,
   reportTranscriptionConfiguration,
@@ -31,11 +32,20 @@ export const transcriptionSessionRoute = createRoute({
   description:
     'Requires an existing signed session and an exact same-origin Origin header. No audio or transcript body is accepted. Disabled unless STT_ENABLED=true. Credentials are never cached.',
   security: [{ AnonymousSession: [] }],
-  request: { headers: browserOriginHeaders },
+  request: {
+    headers: browserOriginHeaders.extend({
+      'x-stt-provider': z
+        .string()
+        .optional()
+        .describe(
+          'Provider received from the runtime server bootstrap. A mismatch fails with 503; absent means a legacy OpenAI client.'
+        )
+    })
+  },
   responses: {
     200: {
       description:
-        'Ephemeral OpenAI credential; expires after 60 seconds for establishing connections, not terminating active sessions.',
+        'Ephemeral provider credential; expires after 60 seconds for establishing connections. Soniox additionally limits active sessions to ten minutes.',
       headers: privateHeaders,
       content: { 'application/json': { schema: transcriptionCredential } }
     },
@@ -60,7 +70,11 @@ export const createTranscriptionSession: RouteHandler<
       c.header('Retry-After', '60');
       return c.json(errorBody('RATE_LIMITED'), 429);
     }
-    const token = await issueTranscriptionCredential(c.req.raw.signal);
+    const token = await issueTranscriptionCredential(
+      transcriptionProvider(),
+      c.req.raw.signal,
+      c.req.header('x-stt-provider')
+    );
     const result = transcriptionCredential.safeParse(token);
     if (!result.success) {
       reportTranscriptionConfiguration('invalid_provider_response');

@@ -139,7 +139,7 @@ Pending credential rejections are handled while waiting for permission. Stop/nav
 
 `transcription/provider.ts` selects a `TranscriptionEngineFactory`; the hook and composer import no OpenAI modules. The existing engine contract normalizes replacement interim text, exactly-once final segments, activity, startup progress and terminal events. `server/transcription-provider.ts` selects the matching server credential issuer and safe diagnostics. Browser and server OpenAI implementations live in their respective `providers/openai/` directories; shared microphone capture/activity and hook draft handling remain outside them.
 
-`server/cleanup-provider.ts` selects text cleanup independently. Both current OpenAI operations share `providers/openai/client.ts` for server-only key resolution and SDK settings, with separate deadlines. `auth/burst-limit.ts` removes duplicated limiter code while retaining independent transcription and cleanup allowances. See [the code review and provider replacement guide](TRANSCRIPTION_REVIEW.md).
+`server/cleanup-provider.ts` selects text cleanup independently. Both OpenAI operations share `providers/openai/client.ts` for SDK settings, with separate deadlines. Both speech providers use `server/secret-key.ts` for cached Secrets Manager access and provider-neutral diagnostics in `server/transcription-diagnostics.ts`. `auth/burst-limit.ts` removes duplicated limiter code while retaining independent transcription and cleanup allowances. See [live transcription](TRANSCRIPTION.md#recording-and-text-ownership) for the provider boundary.
 
 ## Recording ownership and lifecycle
 
@@ -175,3 +175,11 @@ HTTP access checks are composed independently: optional/exact Origin middleware 
 `detail/saved-share-screen.tsx` owns the owner detail content, navigation, footer and persistent sharing actions. A ResizeObserver measures the action bar, including manual-link/status controls, safe-area padding and text wrapping, and reserves matching space within the same screen. `ShareDetail` renders the reading and expandable owner text; the parent no longer guesses a bottom padding. Recipient pages continue to render full thoughts directly.
 
 The composer receives explicit session readiness/saving flags and a narrow cleanup status/action contract. A synchronous pending check supplements rendered status to prevent same-event request races. Application requests and draft ownership stay mounted across screen changes; transcription remains scoped to the mounted composer. Shared `http-client.ts` owns fetch credentials/cache defaults and HTTP error parsing; endpoint modules own request methods, payloads, schemas and AbortSignals. Cleanup discards failure bodies and retains its fixed safe message. The helper never retries or owns application transitions.
+
+## Startup transcription selection
+
+Node instrumentation validates the server-only `STT_PROVIDER`; `server/transcription-config.ts` fixes the selection per process. The request-time home page serializes the validated nonsecret value through `TranscriptionBootstrap`, and the hook retains its selected factory. Session issuance rejects a mismatching provider assertion. OpenAI capture/SDK/protocol and independent cleanup ownership are unchanged. Only Soniox and OpenAI are accepted.
+
+## Soniox speech provider
+
+Soniox is the default runtime-selected provider; `STT_PROVIDER=openai` retains WebRTC. The official browser recording SDK owns direct WebSocket streaming, graceful Stop and cancellation. The existing anonymous-session endpoint issues single-use credentials with 60-second establishment expiry and a ten-minute provider-enforced duration cap. Soniox secrets resolve through the shared Amplify SSR compute role. OpenAI cleanup stays independent. See [TRANSCRIPTION.md](TRANSCRIPTION.md) for deployment and lifecycle details.

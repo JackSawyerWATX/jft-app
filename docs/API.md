@@ -204,3 +204,7 @@ Cleanup is automatically requested only after successful explicit Stop with new 
 The named `ApiError` schema provides the shared envelope; response-specific schemas constrain the allowed codes. `DraftText` reuses the bounded share-input model; `TranscriptionCredential` is shared by server output validation and the browser parser. Both paid endpoints document required Origin headers and 429 Retry-After headers. Transcription OPTIONS is registered through the same OpenAPI method helper as cleanup. This changes the former transcription string-error response into the coded envelope; the website already handles credential failures by status. Any external consumer of the old string response must update.
 
 See [API client boundaries](API_CLIENTS.md) for current browser support, native-client gaps and the HTTP/streaming split. This change adds no native authentication, session-bootstrap endpoint, cross-origin permission, versioned API, idempotency key or persistent storage.
+
+### Transcription provider assertion
+
+Session requests may include `X-STT-Provider` matching the immutable runtime bootstrap. A mismatch returns `503 TRANSCRIPTION_UNAVAILABLE` before contacting a provider. Missing headers remain compatible with legacy OpenAI clients. This header asserts configuration; it does not select a provider or replace existing origin/session checks.

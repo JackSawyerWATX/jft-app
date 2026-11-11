@@ -1,3 +1,4 @@
+import { parseTranscriptionProvider } from './src/shares/transcription/config';
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
@@ -46,7 +47,8 @@ export default defineConfig({
       env: {
         SESSION_SECRET: 'fictional-playwright-session-secret-at-least-32-bytes',
         // Never issue real credentials, even when local/provider environment settings are enabled.
-        STT_ENABLED: 'false'
+        STT_ENABLED: 'false',
+        STT_PROVIDER: parseTranscriptionProvider(process.env.STT_PROVIDER)
       }
     },
     {

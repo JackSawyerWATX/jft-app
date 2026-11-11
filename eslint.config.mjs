@@ -10,6 +10,8 @@ export default defineConfig([
   globalIgnores([
     '.next/**',
     'node_modules/**',
+    '**/.terraform/**',
+    '**/.terraform-*/**',
     'next-env.d.ts',
     'playwright-report/**',
     'test-results/**'

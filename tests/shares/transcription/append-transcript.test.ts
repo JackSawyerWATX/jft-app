@@ -19,3 +19,28 @@ test('append preserves typed text, separates sessions, and enforces code point l
   assert.equal(full.full, true);
   assert.equal(appendTranscript(full.text, 'More', true).text, full.text);
 });
+
+test('verbatim fragments preserve word joins, punctuation, whitespace and Unicode between session boundaries', () => {
+  let text = 'Typed.';
+  text = appendTranscript(text, ' Hel', true, 'verbatim').text;
+  for (const fragment of [
+    'lo',
+    ',',
+    ' ',
+    'world',
+    '!',
+    '\n',
+    '今日は',
+    'いい日。'
+  ]) {
+    text = appendTranscript(text, fragment, false, 'verbatim').text;
+  }
+  assert.equal(text, 'Typed.\n\nHello, world!\n今日はいい日。');
+  assert.equal(
+    appendTranscript(text, ' Again.', true, 'verbatim').text,
+    `${text}\n\nAgain.`
+  );
+  const full = appendTranscript('🌱'.repeat(9999), '🌱🌱', false, 'verbatim');
+  assert.equal(Array.from(full.text).length, 10000);
+  assert.equal(full.full, true);
+});

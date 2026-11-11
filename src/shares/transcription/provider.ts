@@ -1,7 +1,14 @@
+import { createSonioxSpeech } from './providers/soniox/engine';
 import { createOpenAISpeech } from './providers/openai/engine';
 import type { TranscriptionEngineFactory } from './types';
+import type { TranscriptionProvider } from './config';
 
-// Browser composition: only the selected adapter knows its provider's wire protocol.
-// Update server/transcription-provider.ts with the matching credential issuer.
-export const createTranscriptionEngine: TranscriptionEngineFactory =
-  createOpenAISpeech;
+/** Select only a provider installed in this release; never silently fall back. */
+export function transcriptionEngineFactory(
+  provider: TranscriptionProvider | null
+): TranscriptionEngineFactory {
+  if (provider === null)
+    throw new Error('Missing transcription provider bootstrap');
+  if (provider === 'soniox') return createSonioxSpeech;
+  return createOpenAISpeech;
+}
