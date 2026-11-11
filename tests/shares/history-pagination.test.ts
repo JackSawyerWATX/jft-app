@@ -13,13 +13,15 @@ import { shareRepository } from '../../src/shares/server/storage/configured-repo
 import { dispatch } from '../../src/shares/server/app';
 import { repositoryContract } from './repository-contract';
 
-test('bounded memory pages traverse timestamp ties once and cannot reveal another owner', async () => {
+test('bounded memory pages traverse timestamp ties once and cannot reveal another owner', async (t) => {
+  t.mock.method(Date, 'now', () => 1_800_000_000_000);
   const repository = new InMemoryShareRepository();
   const owner = randomUUID();
   const foreign = randomUUID();
   const saved = [];
   for (let index = 0; index < 7; index++)
     saved.push(await repository.create(owner, `Fictional page ${index}.`));
+  assert.equal(new Set(saved.map((share) => share.createdAt)).size, 1);
   await repository.create(foreign, 'Fictional foreign share.');
   const ids: string[] = [];
   let cursor: string | undefined;

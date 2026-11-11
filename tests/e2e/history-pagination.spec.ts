@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures/test';
 import type { Page } from '@playwright/test';
+import type { Share } from '../../src/shares/model';
 
 async function seedHistory(page: Page) {
   await page.goto('/');
@@ -8,25 +9,37 @@ async function seedHistory(page: Page) {
     page.getByRole('button', { name: 'Save privately' })
   ).toBeEnabled();
   await page.getByRole('textbox').fill('');
+  const saved: Share[] = [];
   for (let index = 0; index < 23; index++) {
     const response = await page.request.post('/api/shares', {
       data: { text: `Fictional paginated share ${index}.` }
     });
     expect(response.status()).toBe(201);
+    saved.push(await response.json());
   }
   await page
     .getByRole('banner')
     .getByRole('button', { name: 'Past shares', exact: true })
     .click();
   await expect(page.getByRole('listitem')).toHaveCount(20);
+  return saved;
 }
 
-test('loads bounded history pages without duplicating shares', async ({
+test('deduplicates an overlapping record in a later history page', async ({
   page
 }) => {
-  await seedHistory(page);
+  const saved = await seedHistory(page);
+  const overlapping = saved.at(-1)!;
+  await page.route('**/api/shares?*', async (route) => {
+    const response = await route.fetch();
+    const older = await response.json();
+    await route.fulfill({ response, json: [overlapping, ...older] });
+  });
   await page.getByRole('button', { name: 'Load more', exact: true }).click();
   await expect(page.getByRole('listitem')).toHaveCount(23);
+  await expect(
+    page.getByRole('listitem').filter({ hasText: overlapping.text })
+  ).toHaveCount(1);
   await expect(
     page.getByRole('button', { name: 'Load more', exact: true })
   ).toHaveCount(0);
