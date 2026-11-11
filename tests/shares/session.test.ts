@@ -56,7 +56,7 @@ test('stale signing keys and expired credentials start fresh owners without trus
     );
     assert.ok(fresh.newSession);
     assert.notEqual(fresh.ownerId, ownerId);
-    assert.deepEqual(await store.listByOwner(fresh.ownerId), []);
+    assert.deepEqual((await store.listByOwner(fresh.ownerId)).shares, []);
     assert.equal(await store.findByOwner(saved.id, fresh.ownerId), null);
     assert.ok(await store.findByOwner(saved.id, ownerId));
   }

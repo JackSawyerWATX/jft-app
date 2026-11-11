@@ -1,11 +1,16 @@
-/** Deployment choices; contains no credentials and is safe to serialize. */
-export type TranscriptionProvider = 'soniox' | 'openai';
+import { z } from 'zod';
 
-/** Reject misspellings, empty strings and whitespace instead of silently falling back. */
+/** Nonsecret deployment choice, shared by runtime and build preparation. */
+export const transcriptionProviderSchema = z
+  .enum(['soniox', 'openai'])
+  .default('soniox');
+export type TranscriptionProvider = z.infer<typeof transcriptionProviderSchema>;
+
+/** Reject invalid deployment values instead of silently falling back. */
 export function parseTranscriptionProvider(
   value: string | undefined
 ): TranscriptionProvider {
-  if (value === undefined) return 'soniox';
-  if (value === 'soniox' || value === 'openai') return value;
-  throw new Error('STT_PROVIDER must be soniox or openai');
+  const parsed = transcriptionProviderSchema.safeParse(value);
+  if (!parsed.success) throw new Error('STT_PROVIDER must be soniox or openai');
+  return parsed.data;
 }

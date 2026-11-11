@@ -12,11 +12,12 @@ export class ApiRequestError extends Error {
   }
 }
 
-export async function requestJson(
+/** Return parsed JSON and response headers; reject coded HTTP failures without retrying. */
+export async function requestJsonWithHeaders(
   path: string,
   options?: RequestInit,
   failureMessage?: string
-): Promise<unknown> {
+) {
   const response = await fetch(path, {
     ...options,
     cache: 'no-store',
@@ -43,5 +44,14 @@ export async function requestJson(
       response.status
     );
   }
-  return body;
+  return { body, headers: response.headers };
+}
+
+/** Request validated JSON failures without exposing transport details to callers that do not need them. */
+export async function requestJson(
+  path: string,
+  options?: RequestInit,
+  failureMessage?: string
+): Promise<unknown> {
+  return (await requestJsonWithHeaders(path, options, failureMessage)).body;
 }

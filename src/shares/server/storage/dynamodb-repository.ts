@@ -4,8 +4,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
-  QueryCommand,
-  type QueryCommandInput
+  QueryCommand
 } from '@aws-sdk/lib-dynamodb';
 import { z } from 'zod';
 import {
@@ -13,6 +12,13 @@ import {
   storedShareSchema,
   type StoredShare
 } from './create-stored-share';
+import {
+  historyOptionsSchema,
+  decodeHistoryCursor,
+  encodeHistoryCursor,
+  type HistoryOptions,
+  type HistoryPage
+} from './history-page';
 import type { ShareRepository } from './repository';
 
 export const OWNER_INDEX_NAME = 'owner-created-at';
@@ -62,30 +68,32 @@ export class DynamoDbShareRepository implements ShareRepository {
     return share?.ownerId === ownerId ? share : null;
   }
 
-  async listByOwner(ownerId: string): Promise<StoredShare[]> {
-    const shares: StoredShare[] = [];
-    let cursor: QueryCommandInput['ExclusiveStartKey'];
-
-    do {
-      const { Items, LastEvaluatedKey } = await this.client.send(
-        new QueryCommand({
-          TableName: this.tableName,
-          IndexName: OWNER_INDEX_NAME,
-          KeyConditionExpression: 'ownerId = :owner',
-          ExpressionAttributeValues: { ':owner': ownerId },
-          ScanIndexForward: false,
-          ExclusiveStartKey: cursor
-        })
-      );
-
-      for (const item of Items ?? []) {
-        shares.push(storedShareSchema.parse(item));
-      }
-
-      // A filtered page can be empty even when more results exist.
-      cursor = LastEvaluatedKey;
-    } while (cursor && Object.keys(cursor).length > 0);
-
-    return shares;
+  async listByOwner(
+    ownerId: string,
+    options: HistoryOptions = {}
+  ): Promise<HistoryPage> {
+    const { limit, cursor } = historyOptionsSchema.parse(options);
+    const { Items, LastEvaluatedKey } = await this.client.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: OWNER_INDEX_NAME,
+        KeyConditionExpression: 'ownerId = :owner',
+        ExpressionAttributeValues: { ':owner': ownerId },
+        ScanIndexForward: false,
+        Limit: limit,
+        ExclusiveStartKey: cursor
+          ? { ...decodeHistoryCursor(cursor), ownerId }
+          : undefined
+      })
+    );
+    return {
+      shares: (Items ?? []).map((item) => storedShareSchema.parse(item)),
+      nextCursor: LastEvaluatedKey
+        ? encodeHistoryCursor({
+            id: LastEvaluatedKey.id,
+            createdAt: LastEvaluatedKey.createdAt
+          })
+        : null
+    };
   }
 }

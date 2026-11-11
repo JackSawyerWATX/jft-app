@@ -16,7 +16,12 @@ export function useShareApplication() {
   const [screen, setScreen] = useState<Screen>({ view: 'today' });
   const [text, setText] = useState('');
   const cleanup = useShareCleanup(text, setText);
-  const { history, sessionReady, refresh: loadHistory } = useShareHistory();
+  const {
+    history,
+    sessionReady,
+    refresh: loadHistory,
+    loadMore
+  } = useShareHistory();
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const savePending = useRef(false);
@@ -86,6 +91,7 @@ export function useShareApplication() {
     history,
     sessionReady,
     loadHistory,
+    loadMore,
     saveError,
     saving,
     detailState,

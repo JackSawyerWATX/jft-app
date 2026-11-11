@@ -101,7 +101,9 @@ Success is **201 Created** with a share and a relative `Location: /api/shares/{i
 
 `GET /api/shares`
 
-Success is **200 OK** with an array of this session's shares, newest creation timestamp first. No shares is `[]`, not an error. The Map implementation orders equal timestamps by newest insertion first; DynamoDB does not promise tie order. Its owner index is eventually consistent, so a new share may appear in history after a short delay. There are no query filters, pagination, or owner-selection parameters; ownership always comes from the verified cookie.
+Success is **200 OK** with an array of this session's shares, newest creation timestamp first. No shares is `[]`, not an error. The Map implementation orders equal timestamps by newest insertion first; DynamoDB does not promise tie order. Its owner index is eventually consistent, so a new share may appear in history after a short delay. History is paginated: `limit` defaults to 20 and accepts integers from 1 to 50. When another page may exist, the response includes an opaque `X-Next-Cursor` header; send it as the `cursor` query parameter on the next request, for example `GET /api/shares?limit=20&cursor=<encoded-position>`. The JSON body remains an array. Absence of the header means there are no more pages. A database size boundary can return fewer than `limit` shares. Invalid/oversized cursors and out-of-range limits return 400 `INVALID_HISTORY_QUERY`.
+
+Cursors contain private share positions and must not be logged. They never authorize access: the query owner always comes from the verified cookie. A forged or foreign cursor cannot select a different owner. History is not a snapshot across concurrent writes or index propagation; refresh starts from the newest page and clients should deduplicate IDs across pages. A failed continuation request is an error, not a successful partial page; keep previously displayed shares and offer retry.
 
 ## Read one private share
 
@@ -117,6 +119,7 @@ Success is **200 OK** with the same share shape as creation. This private endpoi
 | 201    | —                      | Confirmed creation; clear the saved draft and show confirmation                       |
 | 400    | INVALID_JSON           | The JSON body cannot be parsed                                                        |
 | 400    | INVALID_SHARE          | Text is missing, blank, too long, or extra fields were supplied                       |
+| 400    | INVALID_HISTORY_QUERY  | History cursor is malformed or limit is outside 1–50                                  |
 | 403    | CROSS_ORIGIN_REQUEST   | POST supplied a foreign Origin                                                        |
 | 404    | SHARE_NOT_FOUND        | Detail record is absent or inaccessible to this owner                                 |
 | 405    | METHOD_NOT_ALLOWED     | This resource does not implement that App Router HTTP method; includes Allow          |

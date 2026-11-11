@@ -10,7 +10,7 @@ test('memory repository instances isolate records', async () => {
   const first = new InMemoryShareRepository();
   const second = new InMemoryShareRepository();
   const saved = await first.create(owner, 'Fictional isolated record.');
-  assert.deepEqual(await second.listByOwner(owner), []);
+  assert.deepEqual((await second.listByOwner(owner)).shares, []);
   assert.equal(await second.findByOwner(saved.id, owner), null);
 });
 

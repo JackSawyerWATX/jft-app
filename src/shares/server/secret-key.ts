@@ -1,5 +1,5 @@
 import 'server-only';
-import { parse as parseArn } from '@aws-sdk/util-arn-parser';
+import { parseSecretArn } from '../../config/secret-arn';
 import {
   SecretsManagerClient,
   GetSecretValueCommand
@@ -28,14 +28,7 @@ export async function secretKey(arn: string | undefined): Promise<string> {
 
   let region: string;
   try {
-    const parsed = parseArn(arn);
-    if (
-      parsed.service !== 'secretsmanager' ||
-      !parsed.resource.startsWith('secret:') ||
-      !parsed.region
-    ) {
-      throw new Error('Not a regional Secrets Manager secret');
-    }
+    const parsed = parseSecretArn(arn);
     region = parsed.region;
   } catch {
     throw new SecretKeyError('invalid_secret_arn', 'Invalid secret ARN');

@@ -6,10 +6,16 @@ import type { ShareHistoryState } from './use-share-history';
 type ShareHistoryProps = {
   history: ShareHistoryState;
   onWrite: () => void;
+  onLoadMore: () => void;
   onOpen: (share: Share) => void;
 };
 
-export function ShareHistory({ history, onWrite, onOpen }: ShareHistoryProps) {
+export function ShareHistory({
+  history,
+  onWrite,
+  onOpen,
+  onLoadMore
+}: ShareHistoryProps) {
   if (history.status === 'loading')
     return <p role="status">Loading your shares…</p>;
   if (history.status === 'failed') {
@@ -40,6 +46,20 @@ export function ShareHistory({ history, onWrite, onOpen }: ShareHistoryProps) {
             <ShareHistoryItem key={share.id} share={share} onOpen={onOpen} />
           ))}
         </ul>
+      )}
+      {history.moreError && (
+        <p role="alert" className="mt-4">
+          {history.moreError}
+        </p>
+      )}
+      {history.nextCursor && (
+        <button
+          className="secondary mt-6 w-full"
+          disabled={history.loadingMore}
+          onClick={onLoadMore}
+        >
+          {history.loadingMore ? 'Loading more…' : 'Load more'}
+        </button>
       )}
     </div>
   );

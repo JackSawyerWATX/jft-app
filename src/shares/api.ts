@@ -1,11 +1,21 @@
 import { z } from 'zod';
 import { shareSchema } from './model';
-import { requestJson } from './http-client';
+import { requestJson, requestJsonWithHeaders } from './http-client';
 
-/** Returns validated history in server order; never retries requests. */
-export async function readShares() {
-  return z.array(shareSchema).parse(await requestJson('/api/shares'));
+/** Return one bounded history page; absence of a continuation cursor means history is complete. */
+export async function readShares(cursor?: string) {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  const { body, headers } = await requestJsonWithHeaders(`/api/shares${query}`);
+  return {
+    shares: z.array(shareSchema).parse(body),
+    nextCursor: z
+      .string()
+      .max(512)
+      .nullable()
+      .parse(headers.get('X-Next-Cursor'))
+  };
 }
+export type ShareHistoryPage = Awaited<ReturnType<typeof readShares>>;
 /**
  * A rejected save may still have committed if its response was lost.
  * Leave draft clearing and retry decisions to the caller.

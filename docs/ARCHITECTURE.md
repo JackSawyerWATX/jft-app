@@ -4,9 +4,9 @@ Doorknob v0.3 keeps the React frontend and Next.js Backend for Frontend (BFF) in
 
 ## Persistence and retention
 
-The storage contract is defined in `storage/repository.ts`. `memory-repository.ts` and `dynamodb-repository.ts` implement it; `configured-repository.ts` selects and caches the adapter. The pure parser in `src/config/runtime.ts` is shared with deployment preparation. Invalid configuration fails rather than falling back to memory; SDK failures propagate to generic HTTP error handling.
+The storage contract is defined in `storage/repository.ts`. `memory-repository.ts` and `dynamodb-repository.ts` implement it; `configured-repository.ts` selects and caches the adapter. The pure parser in `src/config/runtime.ts` is shared with deployment preparation. Provider choices and regional secret ARN parsing are shared with runtime modules; filesystem and credential I/O remain separate. Invalid configuration fails rather than falling back to memory; SDK failures propagate to generic HTTP error handling.
 
-DynamoDB uses an `id` primary key and an ALL-projection `owner-created-at` GSI. Detail reads are strongly consistent; owner history is eventually consistent and follows internal query pages. Equal-timestamp order is unspecified. Private reads enforce ownership. The public application service separately limits link access to seven days from creation. Private records have no automatic expiry or deletion; see [data lifecycle](DATA_GLOSSARY.md#app-data-lifecycle).
+DynamoDB uses an `id` primary key and an ALL-projection `owner-created-at` GSI. Detail reads are strongly consistent; owner history is eventually consistent and returns one bounded database page per request. The client explicitly requests older pages using a private continuation cursor; it preserves earlier pages on failure and ignores stale responses after refresh. Equal-timestamp order is unspecified. Private reads enforce ownership. The public application service separately limits link access to seven days from creation. Private records have no automatic expiry or deletion; see [data lifecycle](DATA_GLOSSARY.md#app-data-lifecycle).
 
 ## Responsibilities
 

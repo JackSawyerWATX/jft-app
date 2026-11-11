@@ -25,7 +25,8 @@ function currentRepository() {
 /** Process-local wiring; the DynamoDB adapter shares durable data across instances. */
 export const shareRepository: ShareRepository = {
   create: (ownerId, text) => currentRepository().create(ownerId, text),
-  listByOwner: (ownerId) => currentRepository().listByOwner(ownerId),
+  listByOwner: (ownerId, options) =>
+    currentRepository().listByOwner(ownerId, options),
   findByOwner: (id, ownerId) => currentRepository().findByOwner(id, ownerId),
   findById: (id) => currentRepository().findById(id)
 };

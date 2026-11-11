@@ -56,7 +56,7 @@ test('public service validates UUIDs before lookup and expires public links with
   currentTime = boundary;
   assert.equal(await readPublicShare(saved.id, store), null);
   assert.ok(await store.findByOwner(saved.id, saved.ownerId));
-  assert.equal((await store.listByOwner(saved.ownerId)).length, 1);
+  assert.equal((await store.listByOwner(saved.ownerId)).shares.length, 1);
   currentTime = boundary + 1;
   assert.equal(await readPublicShare(saved.id, store), null);
   currentTime = Number.NaN;

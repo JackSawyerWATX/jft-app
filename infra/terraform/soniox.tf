@@ -1,6 +1,5 @@
 locals {
-  project_prefix    = "${var.project_name}-${var.environment}"
-  compute_role_name = var.amplify_compute_role_name == null ? "${var.project_name}-${var.environment}-ssr-compute" : var.amplify_compute_role_name
+  project_prefix = "${var.project_name}-${var.environment}"
 }
 
 # Metadata only: no secret version/data source may put key material in state.
@@ -32,11 +31,10 @@ data "aws_iam_policy_document" "soniox" {
 }
 
 resource "aws_iam_role_policy" "soniox" {
-  count      = var.create_soniox_secret || var.stt_soniox_secret_arn != null ? 1 : 0
-  name       = "${local.project_prefix}-soniox-secret"
-  role       = local.compute_role_name
-  policy     = data.aws_iam_policy_document.soniox[0].json
-  depends_on = [aws_iam_role.compute]
+  count  = var.create_soniox_secret || var.stt_soniox_secret_arn != null ? 1 : 0
+  name   = "${local.project_prefix}-soniox-secret"
+  role   = aws_iam_role.compute.name
+  policy = data.aws_iam_policy_document.soniox[0].json
 }
 
 output "stt_soniox_secret_arn" {

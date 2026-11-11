@@ -23,6 +23,10 @@ export const apiFailures = {
     message:
       'Your text could not be tidied. Your original words are still here.'
   },
+  INVALID_HISTORY_QUERY: {
+    status: 400,
+    message: 'Provide a valid history cursor and a limit from 1 to 50.'
+  },
   INVALID_JSON: { status: 400, message: 'Invalid JSON body.' },
   INVALID_SHARE: {
     status: 400,

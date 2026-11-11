@@ -19,10 +19,9 @@ The AWS providers and S3 backend use `AWS_REGION`, or the profile's region when 
 # Reuse an existing secret instead of creating its metadata:
 create_soniox_secret      = false
 stt_soniox_secret_arn     = "arn:aws:secretsmanager:us-west-2:123456789012:secret:existing-soniox-REPLACE"
-amplify_compute_role_name = "REPLACE-EXISTING-TRUSTED-SSR-ROLE"
 ```
 
-When no role override is supplied, the target is `${project_name}-${environment}-ssr-compute`, matching the persistence infrastructure's role. The root creates the default compute role and orders its Soniox policy after role creation. An explicit role override applies Soniox access to that existing role; review its persistence/OpenAI permissions separately. Terraform uses the AWS provider's ARN parser and AWS resource naming validation rather than custom character rules.
+The root manages exactly one SSR compute role, `${project_name}-${environment}-ssr-compute`. Persistence, OpenAI cleanup and optional Soniox permissions all attach to it; `compute_role_arn` is the role to associate with the trusted Amplify branch. If that role already exists, import it into `aws_iam_role.compute` in this same state before applying. There is no separate speech-role override. Review existing policies before adopting a role; never apply competing Terraform states to the same resource.
 
 ## Account, secret and permissions
 
@@ -81,7 +80,7 @@ Associate the existing role only with the intended trusted branch, using the con
 aws amplify update-branch --app-id REPLACE_APP_ID --branch-name REPLACE_TRUSTED_BRANCH --compute-role-arn REPLACE_ROLE_ARN
 ```
 
-The operator needs scoped `amplify:UpdateBranch` and `iam:PassRole`; runtime code gets neither. Do not make a secret-capable role an app-wide default for untrusted previews. The build service role is distinct from the SSR compute role.
+Use the `compute_role_arn` output for that association. The operator needs scoped `amplify:UpdateBranch` and `iam:PassRole`; runtime code gets neither. Do not make a secret-capable role an app-wide default for untrusted previews. The build service role is distinct from the SSR compute role.
 
 Set server-only runtime settings `STT_ENABLED=true`, `STT_PROVIDER=soniox`, `STT_SONIOX_SECRET_ARN=<output ARN>` and the existing `STT_OPENAI_SECRET_ARN` for cleanup. Preserve stable session signing and existing application permissions. Run `node --import tsx scripts/prepare-runtime-env.ts` from the repository root before `npm run build`; it edits only allowlisted non-secret assignments in `.env.production` and preserves unrelated source using dotenvx's source editor. Permanent API keys must not enter Amplify build variables/artifacts. `STT_SONIOX_API_KEY` is local-only and ignored in production.
 
@@ -103,8 +102,12 @@ Run `node --import tsx scripts/prepare-runtime-env.ts` once before `npm run buil
 
 Public links expire after seven days; owner history and underlying records do not. The table disables legacy `expiresAt` TTL, and new writes omit it. Review/apply that change before deploying this retention policy against any existing table; previously deleted records cannot be recovered, and in-flight service deletions may continue after disabling TTL. There is no manual delete endpoint, backup or account recovery. See [data lifecycle](../../docs/DATA_GLOSSARY.md#app-data-lifecycle).
 
-For local database tests, start DynamoDB Local on port 8000 and run `DYNAMODB_LOCAL_ENDPOINT=http://localhost:8000 npm run test:dynamodb`. The shared repository contract covers both adapters; the integration suite additionally exercises pagination/order/conditional writes. Default `npm test` requires no database or provider credentials.
+For local database tests, start DynamoDB Local on port 8000 and run `DYNAMODB_LOCAL_ENDPOINT=http://localhost:8000 npm run test:dynamodb`. The shared repository contract covers both adapters; the integration suite additionally exercises pagination/order/conditional writes. Default `npm test` requires no database or provider credentials. Database-backed HTTP tests cover owner isolation, public-link expiry, retained private access and response projection. GSI visibility checks use bounded polling; immediate read-after-write assertions apply only to detail reads.
 
 Before rollout, test the actual Amplify adapter, runtime role credentials, stable cookies, owner isolation, public-link expiration and delayed history visibility in development. A passing local build does not establish hosting compatibility. No live AWS validation is claimed here.
 
 DynamoDB is on-demand; request and retained table/index storage costs grow with usage. Check current regional rates. There is no retention-based storage bound. Rolling back to memory hides durable history and makes new saves disposable; it is not a migration. Preserve the table and stable signing key during compatible code rollbacks. Table destruction permanently deletes private history; production deletion protection must be deliberately disabled in a reviewed plan first.
+
+## Bounded history
+
+The API returns at most 20 shares by default (maximum requested limit 50). The client follows `X-Next-Cursor` only after an explicit Load more action; a database size boundary can produce a smaller page. Cursors are private positions, not authorization credentials. Each query reconstructs its owner partition from the verified session. See [the API contract](../../docs/API.md#list-private-shares) for request/response details. Pagination is not a consistent snapshot across concurrent writes or index propagation; the UI deduplicates repeated IDs and refresh starts again from the newest page.

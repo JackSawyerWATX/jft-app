@@ -17,19 +17,20 @@ Development generates an ephemeral session signing secret. Optional live transcr
 
 ## Commands
 
-| Command                    | Purpose                                                                   |
-| -------------------------- | ------------------------------------------------------------------------- |
-| `npm run dev`              | Start the local application                                               |
-| `npm run format`           | Apply repository formatting                                               |
-| `npm run format:check`     | Check formatting without changing files                                   |
-| `npm run lint`             | Check React, Next.js, TypeScript, and accessibility rules                 |
-| `npm run test:e2e`         | Run mobile and desktop Chromium user-flow tests after building            |
-| `npm test`                 | Run automated tests                                                       |
-| `npm run build`            | Produce and validate the production application                           |
-| `npm run typecheck`        | Check TypeScript; build first on a fresh checkout to generate route types |
-| `npm run openapi:generate` | Generate temporary `.tmp/openapi.yaml` from TypeScript                    |
-| `npm run openapi:lint`     | Generate and lint temporary YAML with Spectral; warnings fail             |
-| `npm run check`            | Run the complete local verification used by CI                            |
+| Command                    | Purpose                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------ |
+| `npm run dev`              | Start the local application                                                                |
+| `npm run format`           | Apply repository formatting                                                                |
+| `npm run format:check`     | Check formatting without changing files                                                    |
+| `npm run lint`             | Check React, Next.js, TypeScript, and accessibility rules                                  |
+| `npm run test:e2e`         | Run mobile and desktop Chromium user-flow tests after building                             |
+| `npm run test:dynamodb`    | Run repository and HTTP contracts against an explicitly configured DynamoDB Local endpoint |
+| `npm test`                 | Run automated tests                                                                        |
+| `npm run build`            | Produce and validate the production application                                            |
+| `npm run typecheck`        | Check TypeScript; build first on a fresh checkout to generate route types                  |
+| `npm run openapi:generate` | Generate temporary `.tmp/openapi.yaml` from TypeScript                                     |
+| `npm run openapi:lint`     | Generate and lint temporary YAML with Spectral; warnings fail                              |
+| `npm run check`            | Run the complete local verification used by CI                                             |
 
 Before opening or updating a PR:
 

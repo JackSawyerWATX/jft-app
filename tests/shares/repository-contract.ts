@@ -11,7 +11,11 @@ export async function repositoryContract(repository: ShareRepository) {
   assert.equal(await repository.findByOwner(saved.id, randomUUID()), null);
   assert.equal(await repository.findById('invalid'), null);
   assert.equal(await repository.findById(randomUUID()), null);
-  const history = await repository.listByOwner(owner);
+  const history = (
+    await eventuallyHistory(repository, owner, (page) =>
+      page.shares.some((share) => share.id === saved.id)
+    )
+  ).shares;
   assert.deepEqual(
     history.map((share) => share.id),
     [saved.id]
@@ -21,7 +25,7 @@ export async function repositoryContract(repository: ShareRepository) {
     (await repository.findById(saved.id))?.text,
     'Fictional contract text.'
   );
-  assert.deepEqual(await repository.listByOwner(randomUUID()), []);
+  assert.deepEqual((await repository.listByOwner(randomUUID())).shares, []);
   saved.text = 'Mutation';
   const read = await repository.findByOwner(saved.id, owner);
   assert.equal(read?.text, 'Fictional contract text.');
@@ -35,4 +39,20 @@ export async function repositoryContract(repository: ShareRepository) {
   // Legacy TTL metadata is not part of new records: links alone expire.
   assert.equal('expiresAt' in (await repository.findById(saved.id))!, false);
   assert.ok(await readPublicShare(saved.id, repository));
+}
+
+/** GSI history is eventually consistent; detail reads above retain their immediate assertion. */
+export async function eventuallyHistory(
+  repository: ShareRepository,
+  owner: string,
+  ready: (page: Awaited<ReturnType<ShareRepository['listByOwner']>>) => boolean
+) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const page = await repository.listByOwner(owner);
+    if (ready(page)) return page;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(
+    'Fictional history was not visible within the bounded consistency window.'
+  );
 }

@@ -37,6 +37,7 @@ export function ShareApp() {
     history,
     sessionReady,
     loadHistory,
+    loadMore,
     saveError,
     saving,
     detailState,
@@ -135,6 +136,7 @@ export function ShareApp() {
         {view === 'past' && (
           <ShareHistory
             history={history}
+            onLoadMore={() => void loadMore()}
             onWrite={() => navigate({ view: 'today' })}
             onOpen={(share) => {
               if (detailState.status !== 'loading') void openShare(share.id);

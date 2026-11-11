@@ -1,14 +1,20 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { readShares } from '../api';
+import { readShares, type ShareHistoryPage } from '../api';
 import type { Share } from '../model';
 
 /** Only a successfully loaded empty array means there are no saved shares. */
 export type ShareHistoryState =
   | { status: 'loading' }
   | { status: 'failed'; message: string }
-  | { status: 'loaded'; shares: Share[] };
+  | {
+      status: 'loaded';
+      shares: Share[];
+      nextCursor: string | null;
+      loadingMore: boolean;
+      moreError: string;
+    };
 
 /** Ignore stale reads and block saving until session bootstrap succeeds. */
 export function useShareHistory() {
@@ -17,15 +23,23 @@ export function useShareHistory() {
   });
   const [sessionReady, setSessionReady] = useState(false);
   const requestId = useRef(0);
-  const bootstrapRequest = useRef<Promise<Share[]> | null>(null);
+  const pageRequest = useRef<symbol | null>(null);
+  const bootstrapRequest = useRef<Promise<ShareHistoryPage> | null>(null);
 
-  async function load(request: Promise<Share[]>) {
+  async function load(request: Promise<ShareHistoryPage>) {
     const current = ++requestId.current;
+    pageRequest.current = null;
     setHistory({ status: 'loading' });
     try {
-      const shares = await request;
+      const { shares, nextCursor } = await request;
       if (current === requestId.current) {
-        setHistory({ status: 'loaded', shares });
+        setHistory({
+          status: 'loaded',
+          shares,
+          nextCursor,
+          loadingMore: false,
+          moreError: ''
+        });
         setSessionReady(true);
       }
     } catch (cause) {
@@ -42,6 +56,7 @@ export function useShareHistory() {
 
   function invalidate() {
     requestId.current++;
+    pageRequest.current = null;
   }
 
   useEffect(() => {
@@ -58,5 +73,50 @@ export function useShareHistory() {
     return load(bootstrapRequest.current);
   }
 
-  return { history, sessionReady, refresh };
+  async function loadMore() {
+    if (
+      history.status !== 'loaded' ||
+      !history.nextCursor ||
+      pageRequest.current
+    )
+      return;
+    const token = Symbol();
+    pageRequest.current = token;
+    const generation = requestId.current;
+    setHistory({ ...history, loadingMore: true, moreError: '' });
+    try {
+      const page = await readShares(history.nextCursor);
+      if (generation !== requestId.current || pageRequest.current !== token)
+        return;
+      setHistory((current) => {
+        if (current.status !== 'loaded') return current;
+        const seen = new Set(current.shares.map((share) => share.id));
+        return {
+          status: 'loaded',
+          shares: [
+            ...current.shares,
+            ...page.shares.filter((share) => !seen.has(share.id))
+          ],
+          nextCursor: page.nextCursor,
+          loadingMore: false,
+          moreError: ''
+        };
+      });
+    } catch {
+      if (generation === requestId.current && pageRequest.current === token) {
+        setHistory((current) =>
+          current.status === 'loaded'
+            ? {
+                ...current,
+                loadingMore: false,
+                moreError: 'More shares could not be read. Try again.'
+              }
+            : current
+        );
+      }
+    } finally {
+      if (pageRequest.current === token) pageRequest.current = null;
+    }
+  }
+  return { history, sessionReady, refresh, loadMore };
 }

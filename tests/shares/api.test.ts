@@ -163,7 +163,7 @@ test('repository enforces ownership and returns independent snapshots', async ()
     reflection.title
   );
   assert.equal(await shareRepository.findByOwner(created.id, other), null);
-  assert.deepEqual(await shareRepository.listByOwner(other), []);
+  assert.deepEqual((await shareRepository.listByOwner(other)).shares, []);
 });
 
 test('production cookies are Secure and an expired cookie starts a fresh owner', async (context) => {

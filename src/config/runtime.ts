@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { parse as parseArn } from '@aws-sdk/util-arn-parser';
+import { parseSecretArn } from './secret-arn';
+import { transcriptionProviderSchema } from '../shares/transcription/config';
 
 type Environment = Readonly<Record<string, string | undefined>>;
 const persistence = z.discriminatedUnion('SHARE_PERSISTENCE', [
@@ -21,19 +22,15 @@ export function parsePersistenceConfig(env: Environment) {
 const secretArn = z.string().refine((value) => {
   if (!value) return true;
   try {
-    const arn = parseArn(value);
-    return (
-      arn.service === 'secretsmanager' &&
-      !!arn.region &&
-      arn.resource.startsWith('secret:')
-    );
+    parseSecretArn(value);
+    return true;
   } catch {
     return false;
   }
 }, 'Expected a regional Secrets Manager secret ARN.');
 const speech = z.object({
   STT_ENABLED: z.enum(['true', 'false']),
-  STT_PROVIDER: z.enum(['soniox', 'openai']),
+  STT_PROVIDER: transcriptionProviderSchema,
   STT_SONIOX_SECRET_ARN: secretArn,
   STT_OPENAI_SECRET_ARN: secretArn
 });
@@ -43,7 +40,7 @@ export function parseRuntimeConfig(env: Environment) {
     ...parsePersistenceConfig(env),
     ...speech.parse({
       STT_ENABLED: env.STT_ENABLED ?? 'false',
-      STT_PROVIDER: env.STT_PROVIDER ?? 'soniox',
+      STT_PROVIDER: env.STT_PROVIDER,
       STT_SONIOX_SECRET_ARN: env.STT_SONIOX_SECRET_ARN ?? '',
       STT_OPENAI_SECRET_ARN: env.STT_OPENAI_SECRET_ARN ?? ''
     })

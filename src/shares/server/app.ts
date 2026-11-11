@@ -26,7 +26,10 @@ const specificationAllow = 'GET, HEAD, OPTIONS';
 
 const app = new OpenAPIHono<SessionEnvironment>({
   defaultHook: (result) => {
-    if (!result.success) return error('INVALID_SHARE');
+    if (!result.success)
+      return error(
+        result.target === 'query' ? 'INVALID_HISTORY_QUERY' : 'INVALID_SHARE'
+      );
   }
 }).basePath('/api');
 

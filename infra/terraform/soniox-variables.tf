@@ -16,9 +16,3 @@ variable "stt_soniox_secret_arn" {
     error_message = "Use a complete Secrets Manager secret ARN."
   }
 }
-
-variable "amplify_compute_role_name" {
-  type        = string
-  default     = null
-  description = "Existing trusted Amplify SSR role. Defaults to #27's project-environment-ssr-compute name. The shared root creates the default role."
-}
